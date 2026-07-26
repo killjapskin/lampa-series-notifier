@@ -1,0 +1,7 @@
+{
+    "name": "Series Notify",
+    "version": "0.0.1",
+    "author": "killjapskin",
+    "description": "Уведомления о новых сериях",
+    "main": "plugin.js"
+}
