@@ -4,17 +4,25 @@
     const SeriesNotify = {
         version: '0.0.1',
 
-        init() {
-            console.log('[Series Notify] Plugin loaded');
+        init: function () {
+            console.log('[Series Notify] Loaded');
+
+            if (window.Lampa && Lampa.Noty) {
+                Lampa.Noty.show('Series Notify загружен');
+            }
         }
     };
 
-    if (window.appready) {
+    function start() {
         SeriesNotify.init();
+    }
+
+    if (window.appready) {
+        start();
     } else {
-        Lampa.Listener.follow('app', function (event) {
-            if (event.type === 'ready') {
-                SeriesNotify.init();
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') {
+                start();
             }
         });
     }
