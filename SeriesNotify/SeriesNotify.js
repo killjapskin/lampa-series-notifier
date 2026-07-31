@@ -13,7 +13,7 @@
 
     var manifest = {
         type: 'video',
-        version: '0.5.0',
+        version: '0.6.0',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -89,7 +89,7 @@
 
                 '.' + HEAD_CLASS + '{' +
                     'position:relative;' +
-                'display:flex;' +
+                    'display:flex;' +
                     'align-items:center;' +
                     'justify-content:center;' +
                 '}' +
@@ -114,7 +114,14 @@
 
                 '.' + HEAD_CLASS +
                 '.series-notify-active ' +
-                '.series-notify-cross{' +
+                '.series-notify-star{' +
+                    'fill:#fff;' +
+                    'stroke:#fff;' +
+                '}' +
+
+                '.' + HEAD_CLASS +
+                '.series-notify-active ' +
+                '.series-notify-plus{' +
                     'stroke:#fff;' +
                 '}' +
 
@@ -431,17 +438,35 @@
                     'fill="currentColor"/>' +
 
                     '<path ' +
-                    'class="series-notify-cross" ' +
-                    'd="M6.5 6.5L17.5 17.5" ' +
+                    'class="series-notify-star" ' +
+                    'd="M10.2 3.8' +
+                    'l1.55 3.14' +
+                    '3.47.5' +
+                    '-2.51 2.45' +
+                    '.59 3.45' +
+                    '-3.1-1.63' +
+                    '-3.1 1.63' +
+                    '.59-3.45' +
+                    '-2.51-2.45' +
+                    '3.47-.5' +
+                    'L10.2 3.8Z" ' +
+                    'fill="none" ' +
                     'stroke="currentColor" ' +
-                    'stroke-width="2.2" ' +
+                    'stroke-width="1.7" ' +
+                    'stroke-linejoin="round"/>' +
+
+                    '<path ' +
+                    'class="series-notify-plus" ' +
+                    'd="M17.5 14.5V20.5" ' +
+                    'stroke="currentColor" ' +
+                    'stroke-width="2" ' +
                     'stroke-linecap="round"/>' +
 
                     '<path ' +
-                    'class="series-notify-cross" ' +
-                    'd="M17.5 6.5L6.5 17.5" ' +
+                    'class="series-notify-plus" ' +
+                    'd="M14.5 17.5H20.5" ' +
                     'stroke="currentColor" ' +
-                    'stroke-width="2.2" ' +
+                    'stroke-width="2" ' +
                     'stroke-linecap="round"/>' +
 
                 '</svg>' +
@@ -540,15 +565,32 @@
                     'xmlns="http://www.w3.org/2000/svg">' +
 
                         '<path ' +
-                        'd="M6 6L18 18" ' +
+                        'd="M10.2 3.8' +
+                        'l1.55 3.14' +
+                        '3.47.5' +
+                        '-2.51 2.45' +
+                        '.59 3.45' +
+                        '-3.1-1.63' +
+                        '-3.1 1.63' +
+                        '.59-3.45' +
+                        '-2.51-2.45' +
+                        '3.47-.5' +
+                        'L10.2 3.8Z" ' +
+                        'fill="none" ' +
                         'stroke="currentColor" ' +
-                        'stroke-width="2.2" ' +
+                        'stroke-width="1.7" ' +
+                        'stroke-linejoin="round"/>' +
+
+                        '<path ' +
+                        'd="M17.5 14.5V20.5" ' +
+                        'stroke="currentColor" ' +
+                        'stroke-width="2" ' +
                         'stroke-linecap="round"/>' +
 
                         '<path ' +
-                        'd="M18 6L6 18" ' +
+                        'd="M14.5 17.5H20.5" ' +
                         'stroke="currentColor" ' +
-                        'stroke-width="2.2" ' +
+                        'stroke-width="2" ' +
                         'stroke-linecap="round"/>' +
 
                     '</svg>' +

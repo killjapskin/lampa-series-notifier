@@ -2,6 +2,6 @@
     'use strict';
 
     Lampa.Utils.putScriptAsync([
-        'https://killjapskin.github.io/lampa-series-notifier/SeriesNotify/SeriesNotify.js?v=7'
+        'https://killjapskin.github.io/lampa-series-notifier/SeriesNotify/SeriesNotify.js?v=8'
     ], function () {});
 })();
