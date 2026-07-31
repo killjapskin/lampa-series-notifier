@@ -13,7 +13,7 @@
 
     var manifest = {
         type: 'video',
-        version: '0.6.0',
+        version: '0.7.0',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -54,6 +54,22 @@
         ].join('_');
     }
 
+    function findSubscription(id) {
+        var subscriptions = getSubscriptions();
+
+        for (
+            var i = 0;
+            i < subscriptions.length;
+            i++
+        ) {
+            if (subscriptions[i].id === id) {
+                return subscriptions[i];
+            }
+        }
+
+        return null;
+    }
+
     function getNotificationCount() {
         var subscriptions = getSubscriptions();
         var count = 0;
@@ -77,6 +93,33 @@
             getNotificationCount() +
             ')'
         );
+    }
+
+    function markSubscriptionRead(id) {
+        var subscriptions = getSubscriptions();
+        var changed = false;
+
+        for (
+            var i = 0;
+            i < subscriptions.length;
+            i++
+        ) {
+            if (subscriptions[i].id === id) {
+                if (subscriptions[i].has_update) {
+                    subscriptions[i].has_update = false;
+                    subscriptions[i].read_at = Date.now();
+                    changed = true;
+                }
+
+                break;
+            }
+        }
+
+        if (changed) {
+            saveSubscriptions(subscriptions);
+        }
+
+        updateIndicators();
     }
 
     function addStyles() {
@@ -184,6 +227,81 @@
             .text(count > 99 ? '99+' : count);
     }
 
+    function createMovieObject(subscription) {
+        return {
+            id: subscription.movie_id,
+
+            title: subscription.title,
+            name: subscription.title,
+
+            original_title:
+                subscription.original_title,
+
+            original_name:
+                subscription.original_title,
+
+            poster_path:
+                subscription.poster,
+
+            backdrop_path:
+                subscription.backdrop,
+
+            media_type: 'tv',
+            source: 'tmdb'
+        };
+    }
+
+    function openSavedTorrent(cardData) {
+        var subscription = findSubscription(
+            cardData.series_notify_id
+        );
+
+        if (!subscription) {
+            Lampa.Noty.show(
+                'Series Notify: подписка не найдена'
+            );
+
+            return;
+        }
+
+        if (!subscription.torrent_hash) {
+            Lampa.Noty.show(
+                'Series Notify: у подписки нет hash торрента'
+            );
+
+            return;
+        }
+
+        if (
+            !window.Lampa ||
+            !Lampa.Torrent ||
+            typeof Lampa.Torrent.open !== 'function'
+        ) {
+            Lampa.Noty.show(
+                'Series Notify: Lampa.Torrent.open недоступен'
+            );
+
+            return;
+        }
+
+        markSubscriptionRead(subscription.id);
+
+        var movie = createMovieObject(
+            subscription
+        );
+
+        console.log(
+            '[Series Notify] Opening saved torrent:',
+            subscription.torrent_hash,
+            movie
+        );
+
+        Lampa.Torrent.open(
+            subscription.torrent_hash,
+            movie
+        );
+    }
+
     function saveSubscription(event) {
         var file = event.element || {};
         var params = event.params || {};
@@ -280,6 +398,10 @@
                 existing.new_episode ||
                 null;
 
+            subscription.read_at =
+                existing.read_at ||
+                null;
+
             subscriptions[existingIndex] =
                 subscription;
 
@@ -362,6 +484,9 @@
                 series_notify_torrent:
                     subscription.torrent_title,
 
+                series_notify_hash:
+                    subscription.torrent_hash,
+
                 series_notify_season:
                     subscription.season,
 
@@ -416,6 +541,16 @@
                     results: []
                 });
             };
+
+        component.cardRender = function (
+            object,
+            element,
+            card
+        ) {
+            card.onEnter = function () {
+                openSavedTorrent(element);
+            };
+        };
 
         return component;
     }
@@ -494,12 +629,8 @@
         }
 
         if (!$('.' + HEAD_CLASS).length) {
-            var button = createTopButton();
-
-            actions.prepend(button);
-
-            console.log(
-                '[Series Notify] Верхняя кнопка добавлена'
+            actions.prepend(
+                createTopButton()
             );
         }
 
@@ -514,9 +645,7 @@
         }
 
         headTimer = setInterval(
-            function () {
-                ensureTopButton();
-            },
+            ensureTopButton,
             1000
         );
 
@@ -617,14 +746,11 @@
     }
 
     function startPlugin() {
-        if (
-            window.seriesNotifyStarted
-        ) {
+        if (window.seriesNotifyStarted) {
             return;
         }
 
-        window.seriesNotifyStarted =
-            true;
+        window.seriesNotifyStarted = true;
 
         Lampa.Manifest.plugins =
             manifest;
@@ -677,9 +803,7 @@
         Lampa.Listener.follow(
             'app',
             function (event) {
-                if (
-                    event.type === 'ready'
-                ) {
+                if (event.type === 'ready') {
                     startPlugin();
                 }
             }
