@@ -1,47 +1,64 @@
 (function () {
     'use strict';
 
-    var STORAGE_KEY = 'series_notify_subscriptions';
-    var DIAGNOSTIC_KEY = 'series_notify_last_diagnostic';
-    var COMPONENT_NAME = 'series_notify';
+    var STORAGE_KEY =
+        'series_notify_subscriptions';
 
-    var MENU_CLASS = 'series-notify-menu-item';
-    var HEAD_CLASS = 'series-notify-head-button';
-    var STYLE_ID = 'series-notify-styles';
+    var COMPONENT_NAME =
+        'series_notify';
+
+    var MENU_CLASS =
+        'series-notify-menu-item';
+
+    var HEAD_CLASS =
+        'series-notify-head-button';
+
+    var STYLE_ID =
+        'series-notify-styles';
 
     var headObserver = null;
     var headTimer = null;
 
     var manifest = {
         type: 'video',
-        version: '0.8.0',
+        version: '0.9.0',
         name: 'Series Notify',
-        description: 'Уведомления о новых сериях',
+        description:
+            'Уведомления о новых сериях',
         component: COMPONENT_NAME
     };
 
     function getSubscriptions() {
-        var subscriptions = Lampa.Storage.get(
-            STORAGE_KEY,
-            []
-        );
+        var subscriptions =
+            Lampa.Storage.get(
+                STORAGE_KEY,
+                []
+            );
 
-        if (typeof subscriptions === 'string') {
+        if (
+            typeof subscriptions ===
+            'string'
+        ) {
             try {
-                subscriptions = JSON.parse(
-                    subscriptions
-                );
+                subscriptions =
+                    JSON.parse(
+                        subscriptions
+                    );
             } catch (error) {
                 subscriptions = [];
             }
         }
 
-        return Array.isArray(subscriptions)
+        return Array.isArray(
+            subscriptions
+        )
             ? subscriptions
             : [];
     }
 
-    function saveSubscriptions(subscriptions) {
+    function saveSubscriptions(
+        subscriptions
+    ) {
         Lampa.Storage.set(
             STORAGE_KEY,
             subscriptions
@@ -55,22 +72,23 @@
                 'unknown',
 
             data.torrent_hash ||
-                data.torrent_guid ||
-                data.torrent_link ||
                 data.torrent_title ||
                 'unknown'
         ].join('_');
     }
 
     function findSubscription(id) {
-        var subscriptions = getSubscriptions();
+        var subscriptions =
+            getSubscriptions();
 
         for (
             var i = 0;
             i < subscriptions.length;
             i++
         ) {
-            if (subscriptions[i].id === id) {
+            if (
+                subscriptions[i].id === id
+            ) {
                 return subscriptions[i];
             }
         }
@@ -78,28 +96,159 @@
         return null;
     }
 
-    function findSubscriptionIndex(
-        subscriptions,
-        subscription
+    function normalizeFileKey(file) {
+        if (!file) {
+            return '';
+        }
+
+        var path =
+            file.path ||
+            file.file ||
+            file.name ||
+            file.title ||
+            '';
+
+        var season =
+            typeof file.season !==
+                'undefined' &&
+            file.season !== null
+                ? String(file.season)
+                : '';
+
+        var episode =
+            typeof file.episode !==
+                'undefined' &&
+            file.episode !== null
+                ? String(file.episode)
+                : '';
+
+        return [
+            String(path).toLowerCase(),
+            season,
+            episode
+        ].join('|');
+    }
+
+    function normalizeTorrentFiles(
+        items
     ) {
+        var files = [];
+
+        if (!Array.isArray(items)) {
+            return files;
+        }
+
         for (
             var i = 0;
-            i < subscriptions.length;
+            i < items.length;
+            i++
+        ) {
+            var item = items[i] || {};
+            var key =
+                normalizeFileKey(item);
+
+            if (!key) {
+                continue;
+            }
+
+            files.push({
+                key: key,
+
+                id:
+                    typeof item.id !==
+                    'undefined'
+                        ? item.id
+                        : null,
+
+                path:
+                    item.path ||
+                    item.file ||
+                    '',
+
+                title:
+                    item.title ||
+                    item.path_human ||
+                    item.name ||
+                    item.path ||
+                    '',
+
+                season:
+                    typeof item.season !==
+                    'undefined'
+                        ? item.season
+                        : null,
+
+                episode:
+                    typeof item.episode !==
+                    'undefined'
+                        ? item.episode
+                        : null
+            });
+        }
+
+        return files;
+    }
+
+    function getPendingNewFiles(
+        subscription
+    ) {
+        var files =
+            subscription &&
+            Array.isArray(
+                subscription.new_files
+            )
+                ? subscription.new_files
+                : [];
+
+        var pending = [];
+
+        for (
+            var i = 0;
+            i < files.length;
             i++
         ) {
             if (
-                subscriptions[i].id ===
-                subscription.id
+                !files[i]
+                    .loaded_in_player
             ) {
-                return i;
+                pending.push(files[i]);
             }
         }
 
-        return -1;
+        return pending;
+    }
+
+    function refreshUpdateState(
+        subscription
+    ) {
+        var pending =
+            getPendingNewFiles(
+                subscription
+            );
+
+        subscription.has_update =
+            pending.length > 0;
+
+        subscription.new_episode =
+            pending.length
+                ? (
+                    pending[
+                        pending.length - 1
+                    ].episode ||
+                    pending[
+                        pending.length - 1
+                    ].title ||
+                    null
+                )
+                : null;
+
+        return subscription;
     }
 
     function getNotificationCount() {
-        var subscriptions = getSubscriptions();
+        var subscriptions =
+            getSubscriptions();
+
         var count = 0;
 
         for (
@@ -107,7 +256,14 @@
             i < subscriptions.length;
             i++
         ) {
-            if (subscriptions[i].has_update) {
+            refreshUpdateState(
+                subscriptions[i]
+            );
+
+            if (
+                subscriptions[i]
+                    .has_update
+            ) {
                 count++;
             }
         }
@@ -123,8 +279,64 @@
         );
     }
 
-    function markSubscriptionRead(id) {
-        var subscriptions = getSubscriptions();
+    function playerMatchesFile(
+        playerData,
+        newFile
+    ) {
+        if (
+            !playerData ||
+            !newFile
+        ) {
+            return false;
+        }
+
+        var playerKey =
+            normalizeFileKey(
+                playerData
+            );
+
+        if (
+            playerKey &&
+            newFile.key &&
+            playerKey === newFile.key
+        ) {
+            return true;
+        }
+
+        var playerPath = String(
+            playerData.path ||
+            playerData.file ||
+            ''
+        ).toLowerCase();
+
+        var newPath = String(
+            newFile.path || ''
+        ).toLowerCase();
+
+        if (
+            playerPath &&
+            newPath &&
+            playerPath === newPath
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function handlePlayerStart(
+        playerData
+    ) {
+        if (
+            !playerData ||
+            !playerData.torrent_hash
+        ) {
+            return;
+        }
+
+        var subscriptions =
+            getSubscriptions();
+
         var changed = false;
 
         for (
@@ -132,307 +344,143 @@
             i < subscriptions.length;
             i++
         ) {
-            if (subscriptions[i].id !== id) {
-                continue;
-            }
+            var subscription =
+                subscriptions[i];
 
-            if (subscriptions[i].has_update) {
-                subscriptions[i].has_update = false;
-                subscriptions[i].read_at = Date.now();
-                changed = true;
-            }
-
-            break;
-        }
-
-        if (changed) {
-            saveSubscriptions(
-                subscriptions
-            );
-        }
-
-        updateIndicators();
-    }
-
-    function safeClone(value, depth) {
-        depth =
-            typeof depth === 'number'
-                ? depth
-                : 0;
-
-        if (depth > 5) {
-            return '[max-depth]';
-        }
-
-        if (
-            value === null ||
-            typeof value === 'string' ||
-            typeof value === 'number' ||
-            typeof value === 'boolean'
-        ) {
-            return value;
-        }
-
-        if (typeof value === 'undefined') {
-            return '[undefined]';
-        }
-
-        if (typeof value === 'function') {
-            return '[function]';
-        }
-
-        if (Array.isArray(value)) {
-            var arrayResult = [];
-
-            for (
-                var i = 0;
-                i < value.length;
-                i++
+            if (
+                subscription
+                    .torrent_hash !==
+                playerData.torrent_hash
             ) {
-                arrayResult.push(
-                    safeClone(
-                        value[i],
-                        depth + 1
-                    )
-                );
-            }
-
-            return arrayResult;
-        }
-
-        if (typeof value === 'object') {
-            var objectResult = {};
-
-            for (var key in value) {
-                if (
-                    !Object.prototype
-                        .hasOwnProperty
-                        .call(value, key)
-                ) {
-                    continue;
-                }
-
-                try {
-                    objectResult[key] =
-                        safeClone(
-                            value[key],
-                            depth + 1
-                        );
-                } catch (error) {
-                    objectResult[key] =
-                        '[unavailable]';
-                }
-            }
-
-            return objectResult;
-        }
-
-        return String(value);
-    }
-
-    function firstValue(objects, keys) {
-        for (
-            var i = 0;
-            i < objects.length;
-            i++
-        ) {
-            var object = objects[i];
-
-            if (!object) {
                 continue;
+            }
+
+            if (
+                !Array.isArray(
+                    subscription.new_files
+                )
+            ) {
+                subscription.new_files =
+                    [];
             }
 
             for (
                 var j = 0;
-                j < keys.length;
+                j <
+                subscription.new_files
+                    .length;
                 j++
             ) {
-                var key = keys[j];
+                var newFile =
+                    subscription
+                        .new_files[j];
 
                 if (
-                    typeof object[key] !==
-                        'undefined' &&
-                    object[key] !== null &&
-                    object[key] !== ''
+                    newFile
+                        .loaded_in_player
                 ) {
-                    return object[key];
+                    continue;
+                }
+
+                if (
+                    playerMatchesFile(
+                        playerData,
+                        newFile
+                    )
+                ) {
+                    newFile
+                        .loaded_in_player =
+                        true;
+
+                    newFile.loaded_at =
+                        Date.now();
+
+                    changed = true;
+                    break;
                 }
             }
-        }
 
-        return '';
-    }
+            refreshUpdateState(
+                subscription
+            );
 
-    function collectTorrentFiles(
-        event,
-        file,
-        params
-    ) {
-        var candidates = [
-            file.files,
-            file.filelist,
-            file.items,
+            if (changed) {
+                subscription.updated_at =
+                    Date.now();
 
-            params.files,
-            params.filelist,
-            params.items,
-
-            event.files,
-            event.filelist,
-            event.items
-        ];
-
-        for (
-            var i = 0;
-            i < candidates.length;
-            i++
-        ) {
-            if (Array.isArray(candidates[i])) {
-                return safeClone(
-                    candidates[i]
-                );
+                break;
             }
         }
 
-        return [];
-    }
+        if (!changed) {
+            return;
+        }
 
-    function extractTorrentMeta(
-        event,
-        file,
-        params
-    ) {
-        var objects = [
-            file,
-            params,
-            params.torrent,
-            params.element,
-            event,
-            event.torrent
-        ];
+        saveSubscriptions(
+            subscriptions
+        );
 
-        return {
-            hash: firstValue(
-                objects,
-                [
-                    'torrent_hash',
-                    'hash',
-                    'info_hash',
-                    'infoHash'
-                ]
-            ),
+        updateIndicators();
 
-            guid: firstValue(
-                objects,
-                [
-                    'guid',
-                    'torrent_guid',
-                    'torrentGuid'
-                ]
-            ),
-
-            link: firstValue(
-                objects,
-                [
-                    'link',
-                    'url',
-                    'torrent_url',
-                    'torrentUrl',
-                    'magnet'
-                ]
-            ),
-
-            tracker: firstValue(
-                objects,
-                [
-                    'tracker',
-                    'tracker_name',
-                    'trackerName',
-                    'source'
-                ]
-            ),
-
-            title: firstValue(
-                objects,
-                [
-                    'torrent_title',
-                    'title',
-                    'name',
-                    'path'
-                ]
-            ),
-
-            id: firstValue(
-                objects,
-                [
-                    'torrent_id',
-                    'torrentId',
-                    'id'
-                ]
-            )
-        };
-    }
-
-    function getDiagnosticText(meta, files) {
-        return [
-            'hash:' +
-                (meta.hash ? 'есть' : 'нет'),
-
-            'guid:' +
-                (meta.guid ? 'есть' : 'нет'),
-
-            'link:' +
-                (meta.link ? 'есть' : 'нет'),
-
-            'tracker:' +
-                (meta.tracker ? 'есть' : 'нет'),
-
-            'files:' +
-                files.length
-        ].join(' | ');
+        console.log(
+            '[Series Notify] Серия передана в плеер:',
+            playerData
+        );
     }
 
     function addStyles() {
-        if ($('#' + STYLE_ID).length) {
+        if (
+            $('#' + STYLE_ID).length
+        ) {
             return;
         }
 
         var styles = $(
-            '<style id="' + STYLE_ID + '">' +
+            '<style id="' +
+            STYLE_ID +
+            '">' +
 
-                '.' + HEAD_CLASS + '{' +
+                '.' +
+                HEAD_CLASS +
+                '{' +
                     'position:relative;' +
                     'display:flex;' +
                     'align-items:center;' +
                     'justify-content:center;' +
                 '}' +
 
-                '.' + HEAD_CLASS + ' svg{' +
+                '.' +
+                HEAD_CLASS +
+                ' svg{' +
                     'display:block;' +
                     'width:1.5em;' +
                     'height:1.5em;' +
                     'overflow:visible;' +
                 '}' +
 
-                '.' + HEAD_CLASS +
+                '.' +
+                HEAD_CLASS +
                 ' .series-notify-active-background{' +
                     'display:none;' +
                 '}' +
 
-                '.' + HEAD_CLASS +
+                '.' +
+                HEAD_CLASS +
                 '.series-notify-active ' +
                 '.series-notify-active-background{' +
                     'display:block;' +
                 '}' +
 
-                '.' + HEAD_CLASS +
+                '.' +
+                HEAD_CLASS +
                 '.series-notify-active ' +
                 '.series-notify-star{' +
                     'fill:#fff;' +
                     'stroke:#fff;' +
                 '}' +
 
-                '.' + HEAD_CLASS +
+                '.' +
+                HEAD_CLASS +
                 '.series-notify-active ' +
                 '.series-notify-plus{' +
                     'stroke:#fff;' +
@@ -458,10 +506,34 @@
                     'z-index:10;' +
                 '}' +
 
-                '.' + HEAD_CLASS +
+                '.' +
+                HEAD_CLASS +
                 '.series-notify-active ' +
                 '.series-notify-head-counter{' +
                     'display:block;' +
+                '}' +
+
+                '.series-notify-card-update{' +
+                    'position:relative;' +
+                    'box-shadow:' +
+                        '0 0 0 0.22em #ffb300,' +
+                        '0 0 1.2em rgba(255,179,0,0.85);' +
+                    'border-radius:0.35em;' +
+                '}' +
+
+                '.series-notify-card-update:after{' +
+                    'content:"NEW";' +
+                    'position:absolute;' +
+                    'right:0.45em;' +
+                    'top:0.45em;' +
+                    'padding:0.22em 0.45em;' +
+                    'border-radius:0.35em;' +
+                    'background:#ffb300;' +
+                    'color:#111;' +
+                    'font-size:0.6em;' +
+                    'font-weight:700;' +
+                    'line-height:1;' +
+                    'z-index:5;' +
                 '}' +
 
             '</style>'
@@ -474,18 +546,25 @@
         Lampa.Activity.push({
             url: '',
             title: 'Series Notify',
-            component: COMPONENT_NAME,
+            component:
+                COMPONENT_NAME,
             page: 1
         });
     }
 
     function updateIndicators() {
-        var count = getNotificationCount();
+        var count =
+            getNotificationCount();
 
-        $('.' + MENU_CLASS + ' .menu__text')
-            .text(getMenuTitle());
+        $('.' +
+            MENU_CLASS +
+            ' .menu__text'
+        ).text(
+            getMenuTitle()
+        );
 
-        var headButton = $('.' + HEAD_CLASS);
+        var headButton =
+            $('.' + HEAD_CLASS);
 
         headButton.toggleClass(
             'series-notify-active',
@@ -493,7 +572,9 @@
         );
 
         headButton
-            .find('.series-notify-head-counter')
+            .find(
+                '.series-notify-head-counter'
+            )
             .text(
                 count > 99
                     ? '99+'
@@ -501,9 +582,12 @@
             );
     }
 
-    function createMovieObject(subscription) {
+    function createMovieObject(
+        subscription
+    ) {
         return {
-            id: subscription.movie_id,
+            id:
+                subscription.movie_id,
 
             title:
                 subscription.title,
@@ -512,10 +596,12 @@
                 subscription.title,
 
             original_title:
-                subscription.original_title,
+                subscription
+                    .original_title,
 
             original_name:
-                subscription.original_title,
+                subscription
+                    .original_title,
 
             poster_path:
                 subscription.poster,
@@ -528,10 +614,14 @@
         };
     }
 
-    function openSavedTorrent(cardData) {
-        var subscription = findSubscription(
-            cardData.series_notify_id
-        );
+    function openSavedTorrent(
+        cardData
+    ) {
+        var subscription =
+            findSubscription(
+                cardData
+                    .series_notify_id
+            );
 
         if (!subscription) {
             Lampa.Noty.show(
@@ -541,7 +631,10 @@
             return;
         }
 
-        if (!subscription.torrent_hash) {
+        if (
+            !subscription
+                .torrent_hash
+        ) {
             Lampa.Noty.show(
                 'Series Notify: у подписки нет hash торрента'
             );
@@ -550,39 +643,46 @@
         }
 
         if (
-            !window.Lampa ||
             !Lampa.Torrent ||
             typeof Lampa.Torrent.open !==
                 'function'
         ) {
             Lampa.Noty.show(
-                'Series Notify: Lampa.Torrent.open недоступен'
+                'Series Notify: открытие торрента недоступно'
             );
 
             return;
         }
 
-        markSubscriptionRead(
-            subscription.id
-        );
-
-        var movie = createMovieObject(
-            subscription
-        );
+        var movie =
+            createMovieObject(
+                subscription
+            );
 
         console.log(
-            '[Series Notify] Opening saved torrent:',
-            subscription.torrent_hash,
-            movie
+            '[Series Notify] Открываем раздачу:',
+            subscription
+                .torrent_hash
         );
 
+        /*
+         * Здесь больше нет
+         * markSubscriptionRead().
+         *
+         * Открытие раздачи,
+         * ошибка или тайм-аут
+         * ничего не сбрасывают.
+         */
         Lampa.Torrent.open(
-            subscription.torrent_hash,
+            subscription
+                .torrent_hash,
             movie
         );
     }
 
-    function saveSubscription(event) {
+    function saveSubscription(
+        event
+    ) {
         var file =
             event.element || {};
 
@@ -592,26 +692,10 @@
         var movie =
             params.movie || {};
 
-        var torrentMeta =
-            extractTorrentMeta(
-                event,
-                file,
-                params
+        var currentFiles =
+            normalizeTorrentFiles(
+                event.items || []
             );
-
-        var torrentFiles =
-            collectTorrentFiles(
-                event,
-                file,
-                params
-            );
-
-        var diagnosticSnapshot =
-            safeClone({
-                event: event,
-                element: file,
-                params: params
-            });
 
         var subscription = {
             id: '',
@@ -642,49 +726,35 @@
                 '',
 
             torrent_hash:
-                torrentMeta.hash ||
-                '',
-
-            torrent_guid:
-                torrentMeta.guid ||
-                '',
-
-            torrent_link:
-                torrentMeta.link ||
-                '',
-
-            torrent_tracker:
-                torrentMeta.tracker ||
-                '',
-
-            torrent_source_id:
-                torrentMeta.id ||
+                file.torrent_hash ||
+                file.hash ||
                 '',
 
             torrent_title:
-                torrentMeta.title ||
                 file.path ||
                 file.title ||
                 file.name ||
                 '',
 
-            torrent_files:
-                torrentFiles,
+            current_files:
+                currentFiles,
 
-            torrent_file_count:
-                torrentFiles.length,
-
-            torrent_diagnostic:
-                diagnosticSnapshot,
+            current_file_count:
+                currentFiles.length,
 
             season:
-                file.season ||
-                null,
+                typeof file.season !==
+                'undefined'
+                    ? file.season
+                    : null,
 
             episode:
-                file.episode ||
-                null,
+                typeof file.episode !==
+                'undefined'
+                    ? file.episode
+                    : null,
 
+            new_files: [],
             has_update: false,
             new_episode: null,
 
@@ -700,34 +770,56 @@
         var subscriptions =
             getSubscriptions();
 
-        var existingIndex =
-            findSubscriptionIndex(
-                subscriptions,
-                subscription
-            );
+        var existingIndex = -1;
+
+        for (
+            var i = 0;
+            i < subscriptions.length;
+            i++
+        ) {
+            if (
+                subscriptions[i].id ===
+                subscription.id
+            ) {
+                existingIndex = i;
+                break;
+            }
+        }
 
         if (existingIndex >= 0) {
             var existing =
-                subscriptions[existingIndex];
+                subscriptions[
+                    existingIndex
+                ];
 
             subscription.created_at =
                 existing.created_at ||
                 Date.now();
 
-            subscription.has_update =
-                existing.has_update ||
-                false;
-
-            subscription.new_episode =
-                existing.new_episode ||
-                null;
+            subscription.new_files =
+                Array.isArray(
+                    existing.new_files
+                )
+                    ? existing.new_files
+                    : [];
 
             subscription.read_at =
                 existing.read_at ||
                 null;
 
-            subscriptions[existingIndex] =
-                subscription;
+            refreshUpdateState(
+                subscription
+            );
+
+            subscriptions[
+                existingIndex
+            ] = subscription;
+
+            Lampa.Noty.show(
+                'Series Notify: подписка обновлена (' +
+                subscriptions.length +
+                ')'
+            );
         } else {
             subscription.created_at =
                 Date.now();
@@ -735,40 +827,23 @@
             subscriptions.push(
                 subscription
             );
+
+            Lampa.Noty.show(
+                'Series Notify: подписка сохранена (' +
+                subscriptions.length +
+                ')'
+            );
         }
 
         saveSubscriptions(
             subscriptions
         );
 
-        Lampa.Storage.set(
-            DIAGNOSTIC_KEY,
-            diagnosticSnapshot
-        );
-
         updateIndicators();
 
         console.log(
-            '[Series Notify] Полное событие торрента:',
-            diagnosticSnapshot
-        );
-
-        console.log(
-            '[Series Notify] Данные раздачи:',
-            torrentMeta
-        );
-
-        console.log(
-            '[Series Notify] Файлы раздачи:',
-            torrentFiles
-        );
-
-        Lampa.Noty.show(
-            'Series Notify: ' +
-            getDiagnosticText(
-                torrentMeta,
-                torrentFiles
-            )
+            '[Series Notify] Сохранена раздача:',
+            subscription
         );
     }
 
@@ -784,11 +859,14 @@
             i++
         ) {
             var subscription =
-                subscriptions[i];
+                refreshUpdateState(
+                    subscriptions[i]
+                );
 
             cards.push({
                 id:
-                    subscription.movie_id,
+                    subscription
+                        .movie_id,
 
                 title:
                     subscription.title,
@@ -797,10 +875,12 @@
                     subscription.title,
 
                 original_title:
-                    subscription.original_title,
+                    subscription
+                        .original_title,
 
                 original_name:
-                    subscription.original_title,
+                    subscription
+                        .original_title,
 
                 poster_path:
                     subscription.poster,
@@ -816,62 +896,61 @@
                 series_notify_id:
                     subscription.id,
 
-                series_notify_torrent:
-                    subscription.torrent_title,
-
                 series_notify_hash:
-                    subscription.torrent_hash,
+                    subscription
+                        .torrent_hash,
 
-                series_notify_guid:
-                    subscription.torrent_guid,
-
-                series_notify_link:
-                    subscription.torrent_link,
-
-                series_notify_tracker:
-                    subscription.torrent_tracker,
-
-                series_notify_season:
-                    subscription.season,
-
-                series_notify_episode:
-                    subscription.episode,
+                series_notify_torrent:
+                    subscription
+                        .torrent_title,
 
                 series_notify_has_update:
-                    subscription.has_update,
+                    subscription
+                        .has_update,
 
                 series_notify_new_episode:
-                    subscription.new_episode
+                    subscription
+                        .new_episode,
+
+                series_notify_pending:
+                    getPendingNewFiles(
+                        subscription
+                    ).length
             });
         }
 
         return cards;
     }
 
-    function createComponent(object) {
+    function createComponent(
+        object
+    ) {
         var component =
-            new Lampa.InteractionCategory(
-                object
-            );
+            new Lampa
+                .InteractionCategory(
+                    object
+                );
 
-        component.create = function () {
-            var cards = buildCards();
+        component.create =
+            function () {
+                var cards =
+                    buildCards();
 
-            if (cards.length) {
-                this.build({
-                    secuses: true,
-                    page: 1,
-                    total_pages: 1,
-                    results: cards
-                });
-            } else {
-                this.empty({
-                    status: 404,
-                    message:
-                        'Подписок пока нет'
-                });
-            }
-        };
+                if (cards.length) {
+                    this.build({
+                        secuses: true,
+                        page: 1,
+                        total_pages: 1,
+                        results: cards
+                    });
+                } else {
+                    this.empty({
+                        status: 404,
+                        message:
+                            'Подписок пока нет'
+                    });
+                }
+            };
 
         component.nextPageReuest =
             function (
@@ -886,17 +965,39 @@
                 });
             };
 
-        component.cardRender = function (
-            object,
-            element,
-            card
-        ) {
-            card.onEnter = function () {
-                openSavedTorrent(
-                    element
-                );
+        component.cardRender =
+            function (
+                object,
+                element,
+                card
+            ) {
+                if (
+                    card &&
+                    typeof card.render ===
+                        'function'
+                ) {
+                    var rendered =
+                        card.render();
+
+                    if (
+                        rendered &&
+                        rendered.length &&
+                        element
+                            .series_notify_has_update
+                    ) {
+                        rendered.addClass(
+                            'series-notify-card-update'
+                        );
+                    }
+                }
+
+                card.onEnter =
+                    function () {
+                        openSavedTorrent(
+                            element
+                        );
+                    };
             };
-        };
 
         return component;
     }
@@ -904,8 +1005,8 @@
     function createTopButton() {
         var button = $(
             '<div class="head__action selector ' +
-                HEAD_CLASS +
-            '" data-series-notify="true">' +
+            HEAD_CLASS +
+            '">' +
 
                 '<svg viewBox="0 0 24 24" ' +
                 'fill="none" ' +
@@ -976,7 +1077,8 @@
         }
 
         if (
-            !$('.' + HEAD_CLASS).length
+            !$('.' + HEAD_CLASS)
+                .length
         ) {
             actions.prepend(
                 createTopButton()
@@ -995,21 +1097,24 @@
             );
         }
 
-        headTimer = setInterval(
-            ensureTopButton,
-            1000
-        );
+        headTimer =
+            setInterval(
+                ensureTopButton,
+                1000
+            );
 
         if (
-            window.MutationObserver &&
+            window
+                .MutationObserver &&
             !headObserver
         ) {
             headObserver =
                 new MutationObserver(
                     function () {
                         if (
-                            !$('.' + HEAD_CLASS)
-                                .length
+                            !$('.' +
+                                HEAD_CLASS
+                            ).length
                         ) {
                             ensureTopButton();
                         }
@@ -1069,7 +1174,8 @@
 
     function addMenuItem() {
         if (
-            $('.' + MENU_CLASS).length
+            $('.' + MENU_CLASS)
+                .length
         ) {
             updateIndicators();
             return;
@@ -1077,7 +1183,7 @@
 
         var button = $(
             '<li class="menu__item selector ' +
-                MENU_CLASS +
+            MENU_CLASS +
             '">' +
 
                 '<div class="menu__ico">' +
@@ -1105,12 +1211,14 @@
 
     function startPlugin() {
         if (
-            window.seriesNotifyStarted
+            window
+                .seriesNotifyStarted
         ) {
             return;
         }
 
-        window.seriesNotifyStarted =
+        window
+            .seriesNotifyStarted =
             true;
 
         Lampa.Manifest.plugins =
@@ -1131,7 +1239,8 @@
             function (event) {
                 if (
                     !event ||
-                    event.type !== 'onenter'
+                    event.type !==
+                        'onenter'
                 ) {
                     return;
                 }
@@ -1141,6 +1250,20 @@
                 );
             }
         );
+
+        if (
+            Lampa.Player &&
+            Lampa.Player.listener &&
+            typeof Lampa.Player
+                .listener.follow ===
+                'function'
+        ) {
+            Lampa.Player
+                .listener.follow(
+                    'start',
+                    handlePlayerStart
+                );
+        }
 
         Lampa.Listener.follow(
             'app',
@@ -1167,7 +1290,8 @@
             'app',
             function (event) {
                 if (
-                    event.type === 'ready'
+                    event.type ===
+                    'ready'
                 ) {
                     startPlugin();
                 }
