@@ -8,9 +8,12 @@
     var HEAD_CLASS = 'series-notify-head-button';
     var STYLE_ID = 'series-notify-styles';
 
+    var headObserver = null;
+    var headTimer = null;
+
     var manifest = {
         type: 'video',
-        version: '0.4.0',
+        version: '0.5.0',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -86,48 +89,53 @@
 
                 '.' + HEAD_CLASS + '{' +
                     'position:relative;' +
+                'display:flex;' +
+                    'align-items:center;' +
+                    'justify-content:center;' +
                 '}' +
 
                 '.' + HEAD_CLASS + ' svg{' +
-                    'width:1.7em;' +
-                    'height:1.7em;' +
                     'display:block;' +
+                    'width:1.5em;' +
+                    'height:1.5em;' +
+                    'overflow:visible;' +
                 '}' +
 
                 '.' + HEAD_CLASS +
-                ' .series-notify-icon-active{' +
+                ' .series-notify-active-background{' +
                     'display:none;' +
                 '}' +
 
                 '.' + HEAD_CLASS +
                 '.series-notify-active ' +
-                '.series-notify-icon-normal{' +
-                    'display:none;' +
+                '.series-notify-active-background{' +
+                    'display:block;' +
                 '}' +
 
                 '.' + HEAD_CLASS +
                 '.series-notify-active ' +
-                '.series-notify-icon-active{' +
-                    'display:block;' +
+                '.series-notify-cross{' +
+                    'stroke:#fff;' +
                 '}' +
 
                 '.series-notify-head-counter{' +
                     'display:none;' +
                     'position:absolute;' +
-                    'right:-0.25em;' +
-                    'top:-0.25em;' +
-                    'min-width:1.35em;' +
-                    'height:1.35em;' +
+                    'right:-0.3em;' +
+                    'top:-0.35em;' +
+                    'min-width:1.4em;' +
+                    'height:1.4em;' +
                     'padding:0 0.25em;' +
                     'border-radius:1em;' +
                     'background:#e53935;' +
                     'color:#fff;' +
                     'font-size:0.55em;' +
                     'font-weight:700;' +
-                    'line-height:1.35em;' +
+                    'line-height:1.4em;' +
                     'text-align:center;' +
                     'box-sizing:border-box;' +
                     'pointer-events:none;' +
+                    'z-index:10;' +
                 '}' +
 
                 '.' + HEAD_CLASS +
@@ -405,75 +413,43 @@
         return component;
     }
 
-    function createCrossSvg() {
-        return (
-            '<div class="series-notify-icon-normal">' +
-
-                '<svg viewBox="0 0 24 24" ' +
-                'fill="none" ' +
-                'xmlns="http://www.w3.org/2000/svg">' +
-
-                    '<path ' +
-                    'd="M6 6L18 18" ' +
-                    'stroke="currentColor" ' +
-                    'stroke-width="2.2" ' +
-                    'stroke-linecap="round"/>' +
-
-                    '<path ' +
-                    'd="M18 6L6 18" ' +
-                    'stroke="currentColor" ' +
-                    'stroke-width="2.2" ' +
-                    'stroke-linecap="round"/>' +
-
-                '</svg>' +
-
-            '</div>' +
-
-            '<div class="series-notify-icon-active">' +
+    function createTopButton() {
+        var button = $(
+            '<div class="head__action selector ' +
+                HEAD_CLASS +
+            '" data-series-notify="true">' +
 
                 '<svg viewBox="0 0 24 24" ' +
                 'fill="none" ' +
                 'xmlns="http://www.w3.org/2000/svg">' +
 
                     '<circle ' +
+                    'class="series-notify-active-background" ' +
                     'cx="12" ' +
                     'cy="12" ' +
                     'r="10" ' +
                     'fill="currentColor"/>' +
 
                     '<path ' +
-                    'd="M8 8L16 16" ' +
-                    'stroke="black" ' +
-                    'stroke-width="2" ' +
+                    'class="series-notify-cross" ' +
+                    'd="M6.5 6.5L17.5 17.5" ' +
+                    'stroke="currentColor" ' +
+                    'stroke-width="2.2" ' +
                     'stroke-linecap="round"/>' +
 
                     '<path ' +
-                    'd="M16 8L8 16" ' +
-                    'stroke="black" ' +
-                    'stroke-width="2" ' +
+                    'class="series-notify-cross" ' +
+                    'd="M17.5 6.5L6.5 17.5" ' +
+                    'stroke="currentColor" ' +
+                    'stroke-width="2.2" ' +
                     'stroke-linecap="round"/>' +
 
                 '</svg>' +
 
-            '</div>' +
+                '<div class="series-notify-head-counter">' +
+                    '0' +
+                '</div>' +
 
-            '<div class="series-notify-head-counter">' +
-                '0' +
-            '</div>'
-        );
-    }
-
-    function addTopButton() {
-        if ($('.' + HEAD_CLASS).length) {
-            updateIndicators();
-            return;
-        }
-
-        var button = $(
-            '<div class="head__action selector ' +
-                HEAD_CLASS +
-            '">' +
-                createCrossSvg() +
             '</div>'
         );
 
@@ -482,10 +458,68 @@
             openUpdates
         );
 
-        $('.head__actions')
-            .prepend(button);
+        return button;
+    }
+
+    function ensureTopButton() {
+        var actions = $('.head__actions');
+
+        if (!actions.length) {
+            return false;
+        }
+
+        if (!$('.' + HEAD_CLASS).length) {
+            var button = createTopButton();
+
+            actions.prepend(button);
+
+            console.log(
+                '[Series Notify] Верхняя кнопка добавлена'
+            );
+        }
 
         updateIndicators();
+
+        return true;
+    }
+
+    function watchTopPanel() {
+        if (headTimer) {
+            clearInterval(headTimer);
+        }
+
+        headTimer = setInterval(
+            function () {
+                ensureTopButton();
+            },
+            1000
+        );
+
+        if (
+            window.MutationObserver &&
+            !headObserver
+        ) {
+            headObserver =
+                new MutationObserver(
+                    function () {
+                        if (
+                            !$('.' + HEAD_CLASS).length
+                        ) {
+                            ensureTopButton();
+                        }
+                    }
+                );
+
+            headObserver.observe(
+                document.body,
+                {
+                    childList: true,
+                    subtree: true
+                }
+            );
+        }
+
+        ensureTopButton();
     }
 
     function addMenuItem() {
@@ -561,7 +595,7 @@
         );
 
         addMenuItem();
-        addTopButton();
+        watchTopPanel();
 
         Lampa.Listener.follow(
             'torrent_file',
@@ -574,6 +608,16 @@
                 }
 
                 saveSubscription(event);
+            }
+        );
+
+        Lampa.Listener.follow(
+            'app',
+            function () {
+                setTimeout(
+                    ensureTopButton,
+                    300
+                );
             }
         );
 
