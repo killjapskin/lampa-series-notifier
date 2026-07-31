@@ -3,12 +3,15 @@
 
     var STORAGE_KEY = 'series_notify_subscriptions';
     var COMPONENT_NAME = 'series_notify';
+
     var MENU_CLASS = 'series-notify-menu-item';
+    var HEAD_CLASS = 'series-notify-head-button';
+    var STYLE_ID = 'series-notify-styles';
 
     var manifest = {
         type: 'video',
-        version: '0.2.0',
-        name: 'Обновления',
+        version: '0.4.0',
+        name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
     };
@@ -24,28 +27,146 @@
             }
         }
 
-        return Array.isArray(subscriptions) ? subscriptions : [];
+        return Array.isArray(subscriptions)
+            ? subscriptions
+            : [];
     }
 
     function saveSubscriptions(subscriptions) {
-        Lampa.Storage.set(STORAGE_KEY, subscriptions);
+        Lampa.Storage.set(
+            STORAGE_KEY,
+            subscriptions
+        );
     }
 
     function getSubscriptionId(data) {
         return [
-            data.movie_id || data.title || 'unknown',
-            data.torrent_hash || data.torrent_title || 'unknown'
+            data.movie_id ||
+                data.title ||
+                'unknown',
+
+            data.torrent_hash ||
+                data.torrent_title ||
+                'unknown'
         ].join('_');
     }
 
-    function getMenuTitle() {
-        var notifications = 0;
+    function getNotificationCount() {
+        var subscriptions = getSubscriptions();
+        var count = 0;
 
-        return 'Обновления (' + notifications + ')';
+        for (
+            var i = 0;
+            i < subscriptions.length;
+            i++
+        ) {
+            if (subscriptions[i].has_update) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
-    function updateMenuTitle() {
-        $('.' + MENU_CLASS + ' .menu__text').text(getMenuTitle());
+    function getMenuTitle() {
+        return (
+            'Обновления (' +
+            getNotificationCount() +
+            ')'
+        );
+    }
+
+    function addStyles() {
+        if ($('#' + STYLE_ID).length) {
+            return;
+        }
+
+        var styles = $(
+            '<style id="' + STYLE_ID + '">' +
+
+                '.' + HEAD_CLASS + '{' +
+                    'position:relative;' +
+                '}' +
+
+                '.' + HEAD_CLASS + ' svg{' +
+                    'width:1.7em;' +
+                    'height:1.7em;' +
+                    'display:block;' +
+                '}' +
+
+                '.' + HEAD_CLASS +
+                ' .series-notify-icon-active{' +
+                    'display:none;' +
+                '}' +
+
+                '.' + HEAD_CLASS +
+                '.series-notify-active ' +
+                '.series-notify-icon-normal{' +
+                    'display:none;' +
+                '}' +
+
+                '.' + HEAD_CLASS +
+                '.series-notify-active ' +
+                '.series-notify-icon-active{' +
+                    'display:block;' +
+                '}' +
+
+                '.series-notify-head-counter{' +
+                    'display:none;' +
+                    'position:absolute;' +
+                    'right:-0.25em;' +
+                    'top:-0.25em;' +
+                    'min-width:1.35em;' +
+                    'height:1.35em;' +
+                    'padding:0 0.25em;' +
+                    'border-radius:1em;' +
+                    'background:#e53935;' +
+                    'color:#fff;' +
+                    'font-size:0.55em;' +
+                    'font-weight:700;' +
+                    'line-height:1.35em;' +
+                    'text-align:center;' +
+                    'box-sizing:border-box;' +
+                    'pointer-events:none;' +
+                '}' +
+
+                '.' + HEAD_CLASS +
+                '.series-notify-active ' +
+                '.series-notify-head-counter{' +
+                    'display:block;' +
+                '}' +
+
+            '</style>'
+        );
+
+        $('head').append(styles);
+    }
+
+    function openUpdates() {
+        Lampa.Activity.push({
+            url: '',
+            title: 'Series Notify',
+            component: COMPONENT_NAME,
+            page: 1
+        });
+    }
+
+    function updateIndicators() {
+        var count = getNotificationCount();
+
+        $('.' + MENU_CLASS + ' .menu__text')
+            .text(getMenuTitle());
+
+        var headButton = $('.' + HEAD_CLASS);
+
+        headButton.toggleClass(
+            'series-notify-active',
+            count > 0
+        );
+
+        headButton
+            .find('.series-notify-head-counter')
+            .text(count > 99 ? '99+' : count);
     }
 
     function saveSubscription(event) {
@@ -55,56 +176,97 @@
 
         var subscription = {
             id: '',
-            movie_id: movie.id || null,
+
+            movie_id:
+                movie.id ||
+                null,
+
             title:
                 movie.name ||
                 movie.title ||
                 file.first_title ||
                 'Без названия',
+
             original_title:
                 movie.original_name ||
                 movie.original_title ||
                 '',
+
             poster:
                 movie.poster_path ||
                 movie.poster ||
                 '',
+
             backdrop:
                 movie.backdrop_path ||
                 movie.backdrop ||
                 '',
+
             torrent_hash:
                 file.torrent_hash ||
                 file.hash ||
                 '',
+
             torrent_title:
                 file.path ||
                 file.title ||
                 file.name ||
                 '',
-            season: file.season || null,
-            episode: file.episode || null,
+
+            season:
+                file.season ||
+                null,
+
+            episode:
+                file.episode ||
+                null,
+
+            has_update: false,
+            new_episode: null,
+
             updated_at: Date.now()
         };
 
-        subscription.id = getSubscriptionId(subscription);
+        subscription.id =
+            getSubscriptionId(subscription);
 
-        var subscriptions = getSubscriptions();
+        var subscriptions =
+            getSubscriptions();
+
         var existingIndex = -1;
 
-        for (var i = 0; i < subscriptions.length; i++) {
-            if (subscriptions[i].id === subscription.id) {
+        for (
+            var i = 0;
+            i < subscriptions.length;
+            i++
+        ) {
+            if (
+                subscriptions[i].id ===
+                subscription.id
+            ) {
                 existingIndex = i;
                 break;
             }
         }
 
         if (existingIndex >= 0) {
+            var existing =
+                subscriptions[existingIndex];
+
             subscription.created_at =
-                subscriptions[existingIndex].created_at ||
+                existing.created_at ||
                 Date.now();
 
-            subscriptions[existingIndex] = subscription;
+            subscription.has_update =
+                existing.has_update ||
+                false;
+
+            subscription.new_episode =
+                existing.new_episode ||
+                null;
+
+            subscriptions[existingIndex] =
+                subscription;
 
             Lampa.Noty.show(
                 'Series Notify: подписка обновлена (' +
@@ -112,8 +274,12 @@
                 ')'
             );
         } else {
-            subscription.created_at = Date.now();
-            subscriptions.push(subscription);
+            subscription.created_at =
+                Date.now();
+
+            subscriptions.push(
+                subscription
+            );
 
             Lampa.Noty.show(
                 'Series Notify: подписка сохранена (' +
@@ -122,8 +288,11 @@
             );
         }
 
-        saveSubscriptions(subscriptions);
-        updateMenuTitle();
+        saveSubscriptions(
+            subscriptions
+        );
+
+        updateIndicators();
 
         console.log(
             '[Series Notify] Subscriptions:',
@@ -132,31 +301,63 @@
     }
 
     function buildCards() {
-        var subscriptions = getSubscriptions();
+        var subscriptions =
+            getSubscriptions();
+
         var cards = [];
 
-        for (var i = 0; i < subscriptions.length; i++) {
-            var subscription = subscriptions[i];
+        for (
+            var i = 0;
+            i < subscriptions.length;
+            i++
+        ) {
+            var subscription =
+                subscriptions[i];
 
             cards.push({
-                id: subscription.movie_id,
-                title: subscription.title,
-                name: subscription.title,
-                original_title: subscription.original_title,
-                original_name: subscription.original_title,
-                poster_path: subscription.poster,
-                backdrop_path: subscription.backdrop,
+                id:
+                    subscription.movie_id,
+
+                title:
+                    subscription.title,
+
+                name:
+                    subscription.title,
+
+                original_title:
+                    subscription.original_title,
+
+                original_name:
+                    subscription.original_title,
+
+                poster_path:
+                    subscription.poster,
+
+                backdrop_path:
+                    subscription.backdrop,
+
                 media_type: 'tv',
                 source: 'tmdb',
 
                 series_notify: true,
-                series_notify_id: subscription.id,
+
+                series_notify_id:
+                    subscription.id,
+
                 series_notify_torrent:
                     subscription.torrent_title,
+
                 series_notify_season:
                     subscription.season,
+
                 series_notify_episode:
-                    subscription.episode
+                    subscription.episode,
+
+                series_notify_has_update:
+                    subscription.has_update,
+
+                series_notify_new_episode:
+                    subscription.new_episode
             });
         }
 
@@ -165,7 +366,9 @@
 
     function createComponent(object) {
         var component =
-            new Lampa.InteractionCategory(object);
+            new Lampa.InteractionCategory(
+                object
+            );
 
         component.create = function () {
             var cards = buildCards();
@@ -180,67 +383,177 @@
             } else {
                 this.empty({
                     status: 404,
-                    message: 'Подписок пока нет'
+                    message:
+                        'Подписок пока нет'
                 });
             }
         };
 
-        component.nextPageReuest = function (
-            request,
-            resolve
-        ) {
-            resolve({
-                secuses: true,
-                page: 1,
-                total_pages: 1,
-                results: []
-            });
-        };
+        component.nextPageReuest =
+            function (
+                request,
+                resolve
+            ) {
+                resolve({
+                    secuses: true,
+                    page: 1,
+                    total_pages: 1,
+                    results: []
+                });
+            };
 
         return component;
     }
 
+    function createCrossSvg() {
+        return (
+            '<div class="series-notify-icon-normal">' +
+
+                '<svg viewBox="0 0 24 24" ' +
+                'fill="none" ' +
+                'xmlns="http://www.w3.org/2000/svg">' +
+
+                    '<path ' +
+                    'd="M6 6L18 18" ' +
+                    'stroke="currentColor" ' +
+                    'stroke-width="2.2" ' +
+                    'stroke-linecap="round"/>' +
+
+                    '<path ' +
+                    'd="M18 6L6 18" ' +
+                    'stroke="currentColor" ' +
+                    'stroke-width="2.2" ' +
+                    'stroke-linecap="round"/>' +
+
+                '</svg>' +
+
+            '</div>' +
+
+            '<div class="series-notify-icon-active">' +
+
+                '<svg viewBox="0 0 24 24" ' +
+                'fill="none" ' +
+                'xmlns="http://www.w3.org/2000/svg">' +
+
+                    '<circle ' +
+                    'cx="12" ' +
+                    'cy="12" ' +
+                    'r="10" ' +
+                    'fill="currentColor"/>' +
+
+                    '<path ' +
+                    'd="M8 8L16 16" ' +
+                    'stroke="black" ' +
+                    'stroke-width="2" ' +
+                    'stroke-linecap="round"/>' +
+
+                    '<path ' +
+                    'd="M16 8L8 16" ' +
+                    'stroke="black" ' +
+                    'stroke-width="2" ' +
+                    'stroke-linecap="round"/>' +
+
+                '</svg>' +
+
+            '</div>' +
+
+            '<div class="series-notify-head-counter">' +
+                '0' +
+            '</div>'
+        );
+    }
+
+    function addTopButton() {
+        if ($('.' + HEAD_CLASS).length) {
+            updateIndicators();
+            return;
+        }
+
+        var button = $(
+            '<div class="head__action selector ' +
+                HEAD_CLASS +
+            '">' +
+                createCrossSvg() +
+            '</div>'
+        );
+
+        button.on(
+            'hover:enter',
+            openUpdates
+        );
+
+        $('.head__actions')
+            .prepend(button);
+
+        updateIndicators();
+    }
+
     function addMenuItem() {
-        if ($('.' + MENU_CLASS).length) return;
+        if ($('.' + MENU_CLASS).length) {
+            updateIndicators();
+            return;
+        }
 
         var button = $(
             '<li class="menu__item selector ' +
-            MENU_CLASS +
+                MENU_CLASS +
             '">' +
+
                 '<div class="menu__ico">' +
+
                     '<svg viewBox="0 0 24 24" ' +
-                    'fill="currentColor" ' +
+                    'fill="none" ' +
                     'xmlns="http://www.w3.org/2000/svg">' +
-                        '<path d="M12 22a2.5 2.5 0 0 0 ' +
-                        '2.45-2h-4.9A2.5 2.5 0 0 0 ' +
-                        '12 22Zm7-6v-5a7 7 0 0 0-5-6.71' +
-                        'V3a2 2 0 1 0-4 0v1.29A7 7 0 0 0 ' +
-                        '5 11v5l-2 2v1h18v-1l-2-2Z"/>' +
+
+                        '<path ' +
+                        'd="M6 6L18 18" ' +
+                        'stroke="currentColor" ' +
+                        'stroke-width="2.2" ' +
+                        'stroke-linecap="round"/>' +
+
+                        '<path ' +
+                        'd="M18 6L6 18" ' +
+                        'stroke="currentColor" ' +
+                        'stroke-width="2.2" ' +
+                        'stroke-linecap="round"/>' +
+
                     '</svg>' +
+
                 '</div>' +
+
                 '<div class="menu__text">' +
                     getMenuTitle() +
                 '</div>' +
+
             '</li>'
         );
 
-        button.on('hover:enter', function () {
-            Lampa.Activity.push({
-                url: '',
-                title: 'Series Notify',
-                component: COMPONENT_NAME,
-                page: 1
-            });
-        });
+        button.on(
+            'hover:enter',
+            openUpdates
+        );
 
-        $('.menu .menu__list').eq(0).append(button);
+        $('.menu .menu__list')
+            .eq(0)
+            .append(button);
+
+        updateIndicators();
     }
 
     function startPlugin() {
-        if (window.seriesNotifyStarted) return;
+        if (
+            window.seriesNotifyStarted
+        ) {
+            return;
+        }
 
-        window.seriesNotifyStarted = true;
-        Lampa.Manifest.plugins = manifest;
+        window.seriesNotifyStarted =
+            true;
+
+        Lampa.Manifest.plugins =
+            manifest;
+
+        addStyles();
 
         Lampa.Component.add(
             COMPONENT_NAME,
@@ -248,6 +561,7 @@
         );
 
         addMenuItem();
+        addTopButton();
 
         Lampa.Listener.follow(
             'torrent_file',
@@ -263,6 +577,8 @@
             }
         );
 
+        updateIndicators();
+
         Lampa.Noty.show(
             'Series Notify запущен. Подписок: ' +
             getSubscriptions().length
@@ -275,7 +591,9 @@
         Lampa.Listener.follow(
             'app',
             function (event) {
-                if (event.type === 'ready') {
+                if (
+                    event.type === 'ready'
+                ) {
                     startPlugin();
                 }
             }
