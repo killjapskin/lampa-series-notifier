@@ -1,17 +1,14 @@
 (function () {
     'use strict';
 
-    function start() {
-        Lampa.Noty.show('Series Notify: plugin.js работает');
-    }
+    window.seriesNotifyPluginLoaded = true;
 
-    if (window.appready) {
-        start();
-    } else {
-        Lampa.Listener.follow('app', function (event) {
-            if (event.type === 'ready') {
-                start();
-            }
-        });
+    if (window.Lampa && Lampa.Manifest) {
+        Lampa.Manifest.plugins = {
+            type: 'other',
+            version: '0.1.0',
+            name: 'Series Notify',
+            description: 'Уведомления о новых сериях'
+        };
     }
 })();
