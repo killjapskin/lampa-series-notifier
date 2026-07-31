@@ -1,7 +1,17 @@
 (function () {
     'use strict';
 
-    Lampa.Utils.putScriptAsync([
-        'https://raw.githubusercontent.com/killjapskin/lampa-series-notifier/main/SeriesNotify/SeriesNotify.js'
-    ], function () {});
+    function start() {
+        Lampa.Noty.show('Series Notify: plugin.js работает');
+    }
+
+    if (window.appready) {
+        start();
+    } else {
+        Lampa.Listener.follow('app', function (event) {
+            if (event.type === 'ready') {
+                start();
+            }
+        });
+    }
 })();
