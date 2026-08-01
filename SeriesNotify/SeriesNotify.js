@@ -6,7 +6,7 @@
     var MENU_CLASS = 'series-notify-menu-item';
     var HEAD_CLASS = 'series-notify-head-button';
     var STYLE_ID = 'series-notify-styles';
-    var FIRST_CHECK_DELAY = 30000;
+    var FIRST_CHECK_DELAY = 0;
     var CHECK_INTERVAL = 6 * 60 * 60 * 1000;
 
     var pendingTorrent = null;
@@ -19,7 +19,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.1.0',
+        version: '1.1.1',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях и сезонах',
         component: COMPONENT_NAME
@@ -2838,7 +2838,7 @@
         updateIndicators();
 
         log(
-            'Версия 1.1.0 запущена'
+            'Версия 1.1.1 запущена'
         );
     }
 
