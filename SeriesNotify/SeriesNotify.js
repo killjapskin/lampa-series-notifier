@@ -16,7 +16,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.0.2',
+        version: '1.0.3',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -762,16 +762,6 @@
                     safeClone(movie);
             }
 
-            console.log(
-                '[Series Notify] Раздача:',
-                pendingTorrentObject
-            );
-
-            console.log(
-                '[Series Notify] Полный объект сериала:',
-                pendingTorrentMovie
-            );
-
             return originalStart.apply(
                 Lampa.Torrent,
                 arguments
@@ -958,6 +948,60 @@
         );
     }
 
+    function applyMovieToActiveActivity(
+        movieObject
+    ) {
+        if (
+            !Lampa.Activity ||
+            typeof Lampa.Activity.active !==
+                'function'
+        ) {
+            return;
+        }
+
+        var active =
+            Lampa.Activity.active();
+
+        if (!active) {
+            return;
+        }
+
+        /*
+         * Главный фикс версии 1.0.3.
+         * Lampa берёт данные сериала
+         * из активной Activity.
+         */
+        active.movie =
+            movieObject;
+
+        /*
+         * Дополнительные варианты
+         * для разных сборок Lampa.
+         */
+        active.card =
+            movieObject;
+
+        active.item =
+            movieObject;
+
+        if (
+            active.object &&
+            typeof active.object ===
+                'object'
+        ) {
+            active.object.movie =
+                movieObject;
+
+            active.object.card =
+                movieObject;
+        }
+
+        console.log(
+            '[Series Notify] Активная Activity обновлена:',
+            active
+        );
+    }
+
     function openSavedTorrent(cardData) {
         var subscription =
             findSubscription(
@@ -1010,21 +1054,34 @@
                 subscription
             );
 
+        var torrentObject =
+            safeClone(
+                subscription
+                    .torrent_object
+            );
+
+        applyMovieToActiveActivity(
+            movieObject
+        );
+
+        pendingTorrentMovie =
+            safeClone(movieObject);
+
+        pendingTorrentObject =
+            safeClone(torrentObject);
+
         console.log(
             '[Series Notify] Открываем раздачу:',
-            subscription.torrent_object
+            torrentObject
         );
 
         console.log(
-            '[Series Notify] Передаём полный сериал:',
+            '[Series Notify] Полный объект сериала:',
             movieObject
         );
 
         Lampa.Torrent.start(
-            safeClone(
-                subscription
-                    .torrent_object
-            ),
+            torrentObject,
             movieObject
         );
     }
@@ -1246,14 +1303,9 @@
             );
         } else {
             Lampa.Noty.show(
-                'Series Notify: данные сериала сохранены не полностью'
+                'Series Notify: данные сохранены не полностью'
             );
         }
-
-        console.log(
-            '[Series Notify] Подписка:',
-            subscription
-        );
     }
 
     function playerMatchesFile(
@@ -1817,7 +1869,7 @@
         updateIndicators();
 
         Lampa.Noty.show(
-            'Series Notify 1.0.2 запущен'
+            'Series Notify 1.0.3 запущен'
         );
     }
 
