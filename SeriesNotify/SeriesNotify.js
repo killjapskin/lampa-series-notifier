@@ -3,20 +3,18 @@
 
     var STORAGE_KEY = 'series_notify_subscriptions';
     var COMPONENT_NAME = 'series_notify';
-
     var MENU_CLASS = 'series-notify-menu-item';
     var HEAD_CLASS = 'series-notify-head-button';
     var STYLE_ID = 'series-notify-styles';
 
     var headObserver = null;
     var headTimer = null;
-
     var pendingTorrentObject = null;
     var pendingTorrentMovie = null;
 
     var manifest = {
         type: 'video',
-        version: '1.0.10',
+        version: '1.0.11',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -610,11 +608,35 @@
     }
 
     function hasSeriesValue(value) {
-        return (
-            value !== null &&
-            typeof value !== 'undefined' &&
-            value !== ''
-        );
+        if (
+            value === null ||
+            typeof value === 'undefined'
+        ) {
+            return false;
+        }
+
+        var text = String(value)
+            .toLowerCase()
+            .trim();
+
+        if (
+            !text ||
+            text === '0' ||
+            text === '00' ||
+            text === '-' ||
+            text === 'null' ||
+            text === 'undefined'
+        ) {
+            return false;
+        }
+
+        var number = Number(text);
+
+        if (!isNaN(number)) {
+            return number > 0;
+        }
+
+        return false;
     }
 
     function hasSeriesPattern(value) {
@@ -632,13 +654,9 @@
             /\bs\d{1,3}\s*e\d{1,4}\b/i.test(text) ||
             /\b\d{1,3}\s*x\s*\d{1,4}\b/i.test(text) ||
             /\bseason\s*\d{1,3}\b/i.test(text) ||
-            /\bepisode\s*\d{1,4}\b/i.test(text) ||
-            /\bepisodes\s*\d{1,4}\b/i.test(text) ||
-            /\bсезон\s*\d{1,3}\b/i.test(text) ||
-            /\bсезона\s*\d{1,3}\b/i.test(text) ||
-            /\bсерия\s*\d{1,4}\b/i.test(text) ||
-            /\bсерии\s*\d{1,4}\b/i.test(text) ||
-            /\bсерий\s*\d{1,4}\b/i.test(text)
+            /\bepisodes?\s*\d{1,4}\b/i.test(text) ||
+            /\bсезон(?:а)?\s*\d{1,3}\b/i.test(text) ||
+            /\bсер(?:ия|ии|ий)\s*\d{1,4}\b/i.test(text)
         );
     }
 
@@ -929,7 +947,7 @@
             );
 
             console.log(
-                '[Series Notify] Сохранён активный объект:',
+                '[Series Notify] Сохранён активный объект сериала:',
                 pendingTorrentMovie
             );
 
@@ -963,106 +981,106 @@
             STYLE_ID +
             '">' +
 
-                '.' +
-                HEAD_CLASS +
-                '{' +
-                    'position:relative;' +
-                    'display:flex;' +
-                    'align-items:center;' +
-                    'justify-content:center;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            '{' +
+            'position:relative;' +
+            'display:flex;' +
+            'align-items:center;' +
+            'justify-content:center;' +
+            '}' +
 
-                '.' +
-                HEAD_CLASS +
-                ' svg{' +
-                    'display:block;' +
-                    'width:1.5em;' +
-                    'height:1.5em;' +
-                    'overflow:visible;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            ' svg{' +
+            'display:block;' +
+            'width:1.5em;' +
+            'height:1.5em;' +
+            'overflow:visible;' +
+            '}' +
 
-                '.' +
-                HEAD_CLASS +
-                ' .series-notify-active-background{' +
-                    'display:none;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            ' .series-notify-active-background{' +
+            'display:none;' +
+            '}' +
 
-                '.' +
-                HEAD_CLASS +
-                '.series-notify-active ' +
-                '.series-notify-active-background{' +
-                    'display:block;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            '.series-notify-active ' +
+            '.series-notify-active-background{' +
+            'display:block;' +
+            '}' +
 
-                '.' +
-                HEAD_CLASS +
-                '.series-notify-active ' +
-                '.series-notify-star{' +
-                    'fill:#fff;' +
-                    'stroke:#fff;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            '.series-notify-active ' +
+            '.series-notify-star{' +
+            'fill:#fff;' +
+            'stroke:#fff;' +
+            '}' +
 
-                '.' +
-                HEAD_CLASS +
-                '.series-notify-active ' +
-                '.series-notify-plus{' +
-                    'stroke:#fff;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            '.series-notify-active ' +
+            '.series-notify-plus{' +
+            'stroke:#fff;' +
+            '}' +
 
-                '.series-notify-head-counter{' +
-                    'display:none;' +
-                    'position:absolute;' +
-                    'right:-0.3em;' +
-                    'top:-0.35em;' +
-                    'min-width:1.4em;' +
-                    'height:1.4em;' +
-                    'padding:0 0.25em;' +
-                    'border-radius:1em;' +
-                    'background:#e53935;' +
-                    'color:#fff;' +
-                    'font-size:0.55em;' +
-                    'font-weight:700;' +
-                    'line-height:1.4em;' +
-                    'text-align:center;' +
-                    'box-sizing:border-box;' +
-                    'pointer-events:none;' +
-                    'z-index:10;' +
-                '}' +
+            '.series-notify-head-counter{' +
+            'display:none;' +
+            'position:absolute;' +
+            'right:-0.3em;' +
+            'top:-0.35em;' +
+            'min-width:1.4em;' +
+            'height:1.4em;' +
+            'padding:0 0.25em;' +
+            'border-radius:1em;' +
+            'background:#e53935;' +
+            'color:#fff;' +
+            'font-size:0.55em;' +
+            'font-weight:700;' +
+            'line-height:1.4em;' +
+            'text-align:center;' +
+            'box-sizing:border-box;' +
+            'pointer-events:none;' +
+            'z-index:10;' +
+            '}' +
 
-                '.' +
-                HEAD_CLASS +
-                '.series-notify-active ' +
-                '.series-notify-head-counter{' +
-                    'display:block;' +
-                '}' +
+            '.' +
+            HEAD_CLASS +
+            '.series-notify-active ' +
+            '.series-notify-head-counter{' +
+            'display:block;' +
+            '}' +
 
-                '.series-notify-card-update{' +
-                    'position:relative;' +
-                    'box-shadow:' +
-                        '0 0 0 0.22em #ffb300,' +
-                        '0 0 1.2em rgba(255,179,0,0.85);' +
-                    'border-radius:0.35em;' +
-                '}' +
+            '.series-notify-card-update{' +
+            'position:relative;' +
+            'box-shadow:' +
+            '0 0 0 0.22em #ffb300,' +
+            '0 0 1.2em rgba(255,179,0,0.85);' +
+            'border-radius:0.35em;' +
+            '}' +
 
-                '.series-notify-card-update:after{' +
-                    'content:"NEW";' +
-                    'position:absolute;' +
-                    'right:0.45em;' +
-                    'top:0.45em;' +
-                    'padding:0.22em 0.45em;' +
-                    'border-radius:0.35em;' +
-                    'background:#ffb300;' +
-                    'color:#111;' +
-                    'font-size:0.6em;' +
-                    'font-weight:700;' +
-                    'line-height:1;' +
-                    'z-index:5;' +
-                '}' +
+            '.series-notify-card-update:after{' +
+            'content:"NEW";' +
+            'position:absolute;' +
+            'right:0.45em;' +
+            'top:0.45em;' +
+            'padding:0.22em 0.45em;' +
+            'border-radius:0.35em;' +
+            'background:#ffb300;' +
+            'color:#111;' +
+            'font-size:0.6em;' +
+            'font-weight:700;' +
+            'line-height:1;' +
+            'z-index:5;' +
+            '}' +
 
-                '.series-notify-card-deleted{' +
-                    'opacity:0.35;' +
-                    'filter:grayscale(1);' +
-                '}' +
+            '.series-notify-card-deleted{' +
+            'opacity:0.35;' +
+            'filter:grayscale(1);' +
+            '}' +
 
             '</style>'
         );
@@ -1293,7 +1311,7 @@
             )
         ) {
             console.log(
-                '[Series Notify] Фильм или файл без признаков сериала проигнорирован:',
+                '[Series Notify] Фильм проигнорирован:',
                 getTorrentTitle(
                     torrentObject
                 ) ||
@@ -1541,8 +1559,8 @@
             for (
                 var j = 0;
                 j <
-                subscription.new_files
-                    .length;
+                    subscription.new_files
+                        .length;
                 j++
             ) {
                 var newFile =
@@ -1802,6 +1820,14 @@
 
             deleting = true;
 
+            /*
+             * Сначала возвращаем управление
+             * из окна Select в карточки.
+             *
+             * Не закрываем Activity.
+             * Не открываем Activity заново.
+             * Не удаляем карточку из DOM.
+             */
             returnControllerToContent();
 
             setTimeout(
@@ -1817,6 +1843,11 @@
                         typeof card.render ===
                             'function'
                     ) {
+                        /*
+                         * Карточку не удаляем.
+                         * Только делаем полупрозрачной.
+                         * Это не ломает навигацию.
+                         */
                         var rendered =
                             card.render();
 
@@ -2060,52 +2091,52 @@
             HEAD_CLASS +
             '">' +
 
-                '<svg viewBox="0 0 24 24" ' +
-                'fill="none" ' +
-                'xmlns="http://www.w3.org/2000/svg">' +
+            '<svg viewBox="0 0 24 24" ' +
+            'fill="none" ' +
+            'xmlns="http://www.w3.org/2000/svg">' +
 
-                    '<circle ' +
-                    'class="series-notify-active-background" ' +
-                    'cx="12" ' +
-                    'cy="12" ' +
-                    'r="10" ' +
-                    'fill="currentColor"/>' +
+            '<circle ' +
+            'class="series-notify-active-background" ' +
+            'cx="12" ' +
+            'cy="12" ' +
+            'r="10" ' +
+            'fill="currentColor"/>' +
 
-                    '<path ' +
-                    'class="series-notify-star" ' +
-                    'd="M10.2 3.8' +
-                    'l1.55 3.14' +
-                    '3.47.5' +
-                    '-2.51 2.45' +
-                    '.59 3.45' +
-                    '-3.1-1.63' +
-                    '-3.1 1.63' +
-                    '.59-3.45' +
-                    '-2.51-2.45' +
-                    '3.47-.5' +
-                    'L10.2 3.8Z" ' +
-                    'fill="none" ' +
-                    'stroke="currentColor" ' +
-                    'stroke-width="1.7" ' +
-                    'stroke-linejoin="round"/>' +
+            '<path ' +
+            'class="series-notify-star" ' +
+            'd="M10.2 3.8' +
+            'l1.55 3.14' +
+            '3.47.5' +
+            '-2.51 2.45' +
+            '.59 3.45' +
+            '-3.1-1.63' +
+            '-3.1 1.63' +
+            '.59-3.45' +
+            '-2.51-2.45' +
+            '3.47-.5' +
+            'L10.2 3.8Z" ' +
+            'fill="none" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="1.7" ' +
+            'stroke-linejoin="round"/>' +
 
-                    '<path ' +
-                    'class="series-notify-plus" ' +
-                    'd="M17.5 14.5V20.5" ' +
-                    'stroke="currentColor" ' +
-                    'stroke-width="2" ' +
-                    'stroke-linecap="round"/>' +
+            '<path ' +
+            'class="series-notify-plus" ' +
+            'd="M17.5 14.5V20.5" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2" ' +
+            'stroke-linecap="round"/>' +
 
-                    '<path ' +
-                    'class="series-notify-plus" ' +
-                    'd="M14.5 17.5H20.5" ' +
-                    'stroke="currentColor" ' +
-                    'stroke-width="2" ' +
-                    'stroke-linecap="round"/>' +
+            '<path ' +
+            'class="series-notify-plus" ' +
+            'd="M14.5 17.5H20.5" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2" ' +
+            'stroke-linecap="round"/>' +
 
-                '</svg>' +
+            '</svg>' +
 
-                '<div class="series-notify-head-counter">0</div>' +
+            '<div class="series-notify-head-counter">0</div>' +
 
             '</div>'
         );
@@ -2187,34 +2218,34 @@
             'fill="none" ' +
             'xmlns="http://www.w3.org/2000/svg">' +
 
-                '<path ' +
-                'd="M10.2 3.8' +
-                'l1.55 3.14' +
-                '3.47.5' +
-                '-2.51 2.45' +
-                '.59 3.45' +
-                '-3.1-1.63' +
-                '-3.1 1.63' +
-                '.59-3.45' +
-                '-2.51-2.45' +
-                '3.47-.5' +
-                'L10.2 3.8Z" ' +
-                'fill="none" ' +
-                'stroke="currentColor" ' +
-                'stroke-width="1.7" ' +
-                'stroke-linejoin="round"/>' +
+            '<path ' +
+            'd="M10.2 3.8' +
+            'l1.55 3.14' +
+            '3.47.5' +
+            '-2.51 2.45' +
+            '.59 3.45' +
+            '-3.1-1.63' +
+            '-3.1 1.63' +
+            '.59-3.45' +
+            '-2.51-2.45' +
+            '3.47-.5' +
+            'L10.2 3.8Z" ' +
+            'fill="none" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="1.7" ' +
+            'stroke-linejoin="round"/>' +
 
-                '<path ' +
-                'd="M17.5 14.5V20.5" ' +
-                'stroke="currentColor" ' +
-                'stroke-width="2" ' +
-                'stroke-linecap="round"/>' +
+            '<path ' +
+            'd="M17.5 14.5V20.5" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2" ' +
+            'stroke-linecap="round"/>' +
 
-                '<path ' +
-                'd="M14.5 17.5H20.5" ' +
-                'stroke="currentColor" ' +
-                'stroke-width="2" ' +
-                'stroke-linecap="round"/>' +
+            '<path ' +
+            'd="M14.5 17.5H20.5" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2" ' +
+            'stroke-linecap="round"/>' +
 
             '</svg>'
         );
@@ -2233,13 +2264,13 @@
             MENU_CLASS +
             '">' +
 
-                '<div class="menu__ico">' +
-                    createMenuIcon() +
-                '</div>' +
+            '<div class="menu__ico">' +
+            createMenuIcon() +
+            '</div>' +
 
-                '<div class="menu__text">' +
-                    getMenuTitle() +
-                '</div>' +
+            '<div class="menu__text">' +
+            getMenuTitle() +
+            '</div>' +
 
             '</li>'
         );
@@ -2345,7 +2376,7 @@
         updateIndicators();
 
         Lampa.Noty.show(
-            'Series Notify 1.0.10 запущен'
+            'Series Notify 1.0.11 запущен'
         );
     }
 
