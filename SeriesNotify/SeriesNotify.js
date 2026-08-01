@@ -16,7 +16,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.0.3',
+        version: '1.0.4',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -727,6 +727,44 @@
             );
     }
 
+    function getActiveMovie() {
+        if (
+            !Lampa.Activity ||
+            typeof Lampa.Activity.active !==
+                'function'
+        ) {
+            return null;
+        }
+
+        var active =
+            Lampa.Activity.active();
+
+        if (!active) {
+            return null;
+        }
+
+        if (active.movie) {
+            return active.movie;
+        }
+
+        if (
+            active.object &&
+            active.object.movie
+        ) {
+            return active.object.movie;
+        }
+
+        if (active.card) {
+            return active.card;
+        }
+
+        if (active.item) {
+            return active.item;
+        }
+
+        return null;
+    }
+
     function installTorrentStartCapture() {
         if (
             !Lampa.Torrent ||
@@ -757,10 +795,34 @@
                     );
             }
 
-            if (movie) {
+            /*
+             * Главный фикс версии 1.0.4.
+             * В момент обычного выбора
+             * забираем сериал из активной
+             * страницы Lampa.
+             */
+            var activeMovie =
+                getActiveMovie();
+
+            if (activeMovie) {
+                pendingTorrentMovie =
+                    safeClone(
+                        activeMovie
+                    );
+            } else if (movie) {
                 pendingTorrentMovie =
                     safeClone(movie);
             }
+
+            console.log(
+                '[Series Notify] Сохранён объект раздачи:',
+                pendingTorrentObject
+            );
+
+            console.log(
+                '[Series Notify] Сохранён активный объект сериала:',
+                pendingTorrentMovie
+            );
 
             return originalStart.apply(
                 Lampa.Torrent,
@@ -966,18 +1028,9 @@
             return;
         }
 
-        /*
-         * Главный фикс версии 1.0.3.
-         * Lampa берёт данные сериала
-         * из активной Activity.
-         */
         active.movie =
             movieObject;
 
-        /*
-         * Дополнительные варианты
-         * для разных сборок Lampa.
-         */
         active.card =
             movieObject;
 
@@ -995,11 +1048,6 @@
             active.object.card =
                 movieObject;
         }
-
-        console.log(
-            '[Series Notify] Активная Activity обновлена:',
-            active
-        );
     }
 
     function openSavedTorrent(cardData) {
@@ -1069,16 +1117,6 @@
 
         pendingTorrentObject =
             safeClone(torrentObject);
-
-        console.log(
-            '[Series Notify] Открываем раздачу:',
-            torrentObject
-        );
-
-        console.log(
-            '[Series Notify] Полный объект сериала:',
-            movieObject
-        );
 
         Lampa.Torrent.start(
             torrentObject,
@@ -1220,34 +1258,6 @@
                 );
         }
 
-        if (
-            !subscription.movie_object &&
-            existing &&
-            existing.movie_object
-        ) {
-            subscription.movie_object =
-                safeClone(
-                    existing.movie_object
-                );
-        }
-
-        if (
-            !subscription.torrent_object &&
-            existing &&
-            existing.torrent_object
-        ) {
-            subscription.torrent_object =
-                safeClone(
-                    existing.torrent_object
-                );
-
-            subscription.torrent_link =
-                existing.torrent_link;
-
-            subscription.torrent_tracker =
-                existing.torrent_tracker;
-        }
-
         subscription.id =
             getSubscriptionId(
                 subscription
@@ -1299,7 +1309,7 @@
             subscription.torrent_object
         ) {
             Lampa.Noty.show(
-                'Series Notify: раздача и данные серий сохранены'
+                'Series Notify: полный контекст сериала сохранён'
             );
         } else {
             Lampa.Noty.show(
@@ -1869,7 +1879,7 @@
         updateIndicators();
 
         Lampa.Noty.show(
-            'Series Notify 1.0.3 запущен'
+            'Series Notify 1.0.4 запущен'
         );
     }
 
