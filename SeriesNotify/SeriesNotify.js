@@ -14,11 +14,17 @@
 
     var manifest = {
         type: 'video',
-        version: '1.0.11',
+        version: '1.0.12',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
     };
+
+    function log(message) {
+        try {
+            console.log('[Series Notify]', message);
+        } catch (error) {}
+    }
 
     function getSubscriptions() {
         var subscriptions = Lampa.Storage.get(
@@ -1187,8 +1193,8 @@
             cardData &&
             cardData.series_notify_deleted
         ) {
-            Lampa.Noty.show(
-                'Series Notify: сериал уже удалён'
+            log(
+                'Сериал уже удалён'
             );
 
             return;
@@ -1213,16 +1219,16 @@
         }
 
         if (!subscription) {
-            Lampa.Noty.show(
-                'Series Notify: подписка не найдена'
+            log(
+                'Подписка не найдена'
             );
 
             return;
         }
 
         if (!subscription.torrent_object) {
-            Lampa.Noty.show(
-                'Series Notify: точная раздача не сохранена'
+            log(
+                'Точная раздача не сохранена'
             );
 
             return;
@@ -1233,8 +1239,8 @@
             typeof Lampa.Torrent.start !==
                 'function'
         ) {
-            Lampa.Noty.show(
-                'Series Notify: открытие раздачи недоступно'
+            log(
+                'Открытие раздачи недоступно'
             );
 
             return;
@@ -1475,12 +1481,12 @@
             subscription.movie_object &&
             subscription.torrent_object
         ) {
-            Lampa.Noty.show(
-                'Series Notify: полный контекст сериала сохранён'
+            log(
+                'Полный контекст сериала сохранён'
             );
         } else {
-            Lampa.Noty.show(
-                'Series Notify: данные сохранены не полностью'
+            log(
+                'Данные сохранены не полностью'
             );
         }
     }
@@ -1752,8 +1758,8 @@
         }
 
         if (!removed) {
-            Lampa.Noty.show(
-                'Series Notify: карточка не найдена'
+            log(
+                'Карточка не найдена'
             );
 
             return false;
@@ -1765,8 +1771,8 @@
         cardData.series_notify_deleted =
             true;
 
-        Lampa.Noty.show(
-            'Series Notify: сериал удалён. Карточка исчезнет после повторного входа'
+        log(
+            'Сериал удалён'
         );
 
         return true;
@@ -1799,8 +1805,8 @@
             cardData &&
             cardData.series_notify_deleted
         ) {
-            Lampa.Noty.show(
-                'Series Notify: сериал уже удалён'
+            log(
+                'Сериал уже удалён'
             );
 
             return;
@@ -1820,14 +1826,6 @@
 
             deleting = true;
 
-            /*
-             * Сначала возвращаем управление
-             * из окна Select в карточки.
-             *
-             * Не закрываем Activity.
-             * Не открываем Activity заново.
-             * Не удаляем карточку из DOM.
-             */
             returnControllerToContent();
 
             setTimeout(
@@ -1843,11 +1841,6 @@
                         typeof card.render ===
                             'function'
                     ) {
-                        /*
-                         * Карточку не удаляем.
-                         * Только делаем полупрозрачной.
-                         * Это не ломает навигацию.
-                         */
                         var rendered =
                             card.render();
 
@@ -2375,8 +2368,8 @@
 
         updateIndicators();
 
-        Lampa.Noty.show(
-            'Series Notify 1.0.11 запущен'
+        log(
+            'Версия 1.0.12 запущена'
         );
     }
 
