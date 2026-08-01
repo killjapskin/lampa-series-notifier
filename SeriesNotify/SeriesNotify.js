@@ -16,7 +16,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.0.6',
+        version: '1.0.7',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -130,6 +130,13 @@
         return null;
     }
 
+    function normalizeText(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
     function getTorrentLink(torrentObject) {
         if (!torrentObject) {
             return '';
@@ -208,11 +215,9 @@
 
         return (
             'title:' +
-            String(
-                subscription.title || ''
+            normalizeText(
+                subscription.title
             )
-                .toLowerCase()
-                .trim()
         );
     }
 
@@ -361,9 +366,7 @@
             );
 
         merged.id =
-            getSubscriptionId(
-                merged
-            );
+            getSubscriptionId(merged);
 
         return merged;
     }
@@ -489,16 +492,10 @@
                     String(movieId);
             } else {
                 sameMovie =
-                    String(
-                        subscription.title || ''
-                    )
-                        .toLowerCase()
-                        .trim() ===
-                    String(
-                        title || ''
-                    )
-                        .toLowerCase()
-                        .trim();
+                    normalizeText(
+                        subscription.title
+                    ) ===
+                    normalizeText(title);
             }
 
             if (!sameMovie) {
@@ -952,6 +949,11 @@
                     'z-index:5;' +
                 '}' +
 
+                '.series-notify-card-deleted{' +
+                    'opacity:0.35;' +
+                    'filter:grayscale(1);' +
+                '}' +
+
             '</style>'
         );
 
@@ -1053,6 +1055,17 @@
     }
 
     function openSavedTorrent(cardData) {
+        if (
+            cardData &&
+            cardData.series_notify_deleted
+        ) {
+            Lampa.Noty.show(
+                'Series Notify: сериал уже удалён'
+            );
+
+            return;
+        }
+
         var subscription =
             findSubscription(
                 cardData
@@ -1299,9 +1312,7 @@
             subscription
         );
 
-        saveSubscriptions(
-            cleaned
-        );
+        saveSubscriptions(cleaned);
 
         migrateAndDeduplicate();
         updateIndicators();
@@ -1597,56 +1608,50 @@
         saveSubscriptions(result);
         updateIndicators();
 
+        cardData.series_notify_deleted =
+            true;
+
         Lampa.Noty.show(
-            'Series Notify: сериал удалён'
+            'Series Notify: сериал удалён. Карточка исчезнет после повторного входа'
         );
 
         return true;
     }
 
-    function refreshUpdatesAfterRemove() {
-        /*
-         * Не удаляем карточку через
-         * card.render().remove().
-         *
-         * После прямого удаления DOM
-         * навигация Lampa продолжала
-         * держать фокус на исчезнувшем
-         * элементе и зависала.
-         */
-
+    function returnControllerToContent() {
         try {
             if (
-                Lampa.Activity &&
-                typeof Lampa.Activity.backward ===
+                Lampa.Controller &&
+                typeof Lampa.Controller.toggle ===
                     'function'
             ) {
-                Lampa.Activity.backward();
-            } else if (
-                Lampa.Activity &&
-                typeof Lampa.Activity.back ===
-                    'function'
-            ) {
-                Lampa.Activity.back();
+                Lampa.Controller.toggle(
+                    'content'
+                );
             }
         } catch (error) {
             console.log(
-                '[Series Notify] Ошибка закрытия раздела:',
+                '[Series Notify] Ошибка возврата контроллера:',
                 error
             );
         }
-
-        setTimeout(
-            function () {
-                openUpdates();
-            },
-            350
-        );
     }
 
     function confirmRemoveSubscription(
-        cardData
+        cardData,
+        card
     ) {
+        if (
+            cardData &&
+            cardData.series_notify_deleted
+        ) {
+            Lampa.Noty.show(
+                'Series Notify: сериал уже удалён'
+            );
+
+            return;
+        }
+
         var title =
             cardData.title ||
             cardData.name ||
@@ -1661,12 +1666,51 @@
 
             deleting = true;
 
-            if (!removeSubscription(cardData)) {
-                deleting = false;
-                return;
-            }
+            /*
+             * Сначала возвращаем управление
+             * из окна Select в карточки.
+             *
+             * Не закрываем Activity.
+             * Не открываем Activity заново.
+             * Не удаляем карточку из DOM.
+             */
+            returnControllerToContent();
 
-            refreshUpdatesAfterRemove();
+            setTimeout(
+                function () {
+                    var removed =
+                        removeSubscription(
+                            cardData
+                        );
+
+                    if (
+                        removed &&
+                        card &&
+                        typeof card.render ===
+                            'function'
+                    ) {
+                        /*
+                         * Карточку не удаляем.
+                         * Только делаем полупрозрачной.
+                         * Это не ломает навигацию.
+                         */
+                        var rendered =
+                            card.render();
+
+                        if (
+                            rendered &&
+                            rendered.length
+                        ) {
+                            rendered.addClass(
+                                'series-notify-card-deleted'
+                            );
+                        }
+                    }
+
+                    deleting = false;
+                },
+                150
+            );
         }
 
         if (
@@ -1704,19 +1748,16 @@
                             item.value ===
                                 'remove'
                         ) {
-                            /*
-                             * Даём окну выбора
-                             * сначала закрыться.
-                             */
-                            setTimeout(
-                                removeConfirmed,
-                                100
-                            );
+                            removeConfirmed();
+                        } else {
+                            returnControllerToContent();
                         }
                     },
 
                 onBack:
-                    function () {}
+                    function () {
+                        returnControllerToContent();
+                    }
             });
 
             return;
@@ -1881,7 +1922,8 @@
                 card.onMenu =
                     function () {
                         confirmRemoveSubscription(
-                            element
+                            element,
+                            card
                         );
                     };
             };
@@ -2147,9 +2189,7 @@
                     return;
                 }
 
-                saveSubscription(
-                    event
-                );
+                saveSubscription(event);
             }
         );
 
@@ -2182,7 +2222,7 @@
         updateIndicators();
 
         Lampa.Noty.show(
-            'Series Notify 1.0.6 запущен'
+            'Series Notify 1.0.7 запущен'
         );
     }
 
