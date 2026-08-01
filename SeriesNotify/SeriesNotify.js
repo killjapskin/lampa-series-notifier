@@ -16,7 +16,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.0.1',
+        version: '1.0.2',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях',
         component: COMPONENT_NAME
@@ -56,7 +56,7 @@
                 ? depth
                 : 0;
 
-        if (depth > 7) {
+        if (depth > 10) {
             return null;
         }
 
@@ -77,26 +77,30 @@
         }
 
         if (Array.isArray(value)) {
-            var clonedArray = [];
+            var arrayResult = [];
 
             for (
                 var i = 0;
                 i < value.length;
                 i++
             ) {
-                clonedArray.push(
-                    safeClone(
-                        value[i],
-                        depth + 1
-                    )
+                var arrayValue = safeClone(
+                    value[i],
+                    depth + 1
                 );
+
+                if (arrayValue !== null) {
+                    arrayResult.push(
+                        arrayValue
+                    );
+                }
             }
 
-            return clonedArray;
+            return arrayResult;
         }
 
         if (typeof value === 'object') {
-            var clonedObject = {};
+            var objectResult = {};
 
             for (var key in value) {
                 if (
@@ -108,20 +112,19 @@
                 }
 
                 try {
-                    var clonedValue =
-                        safeClone(
-                            value[key],
-                            depth + 1
-                        );
+                    var objectValue = safeClone(
+                        value[key],
+                        depth + 1
+                    );
 
-                    if (clonedValue !== null) {
-                        clonedObject[key] =
-                            clonedValue;
+                    if (objectValue !== null) {
+                        objectResult[key] =
+                            objectValue;
                     }
                 } catch (error) {}
             }
 
-            return clonedObject;
+            return objectResult;
         }
 
         return null;
@@ -218,21 +221,16 @@
             score += 1000;
         }
 
+        if (subscription.movie_object) {
+            score += 800;
+        }
+
         if (subscription.torrent_link) {
             score += 200;
         }
 
         if (subscription.torrent_hash) {
             score += 50;
-        }
-
-        if (
-            Array.isArray(
-                subscription.new_files
-            )
-        ) {
-            score +=
-                subscription.new_files.length;
         }
 
         score += Math.floor(
@@ -244,17 +242,17 @@
         return score;
     }
 
-    function mergeNewFiles(target, source) {
+    function mergeNewFiles(first, second) {
         var result = [];
         var used = {};
 
         var collections = [
-            Array.isArray(target)
-                ? target
+            Array.isArray(first)
+                ? first
                 : [],
 
-            Array.isArray(source)
-                ? source
+            Array.isArray(second)
+                ? second
                 : []
         ];
 
@@ -336,12 +334,6 @@
                 secondary.new_files
             );
 
-        merged.has_update =
-            Boolean(
-                preferred.has_update ||
-                secondary.has_update
-            );
-
         merged.created_at =
             Math.min(
                 Number(
@@ -367,7 +359,9 @@
             );
 
         merged.id =
-            getSubscriptionId(merged);
+            getSubscriptionId(
+                merged
+            );
 
         return merged;
     }
@@ -387,35 +381,35 @@
             var current =
                 subscriptions[i];
 
-            var key =
+            var movieKey =
                 getMovieKey(current);
 
-            if (!key) {
+            if (!movieKey) {
                 continue;
             }
 
-            if (!grouped[key]) {
-                grouped[key] =
+            if (!grouped[movieKey]) {
+                grouped[movieKey] =
                     current;
 
-                order.push(key);
+                order.push(movieKey);
                 continue;
             }
 
             var existing =
-                grouped[key];
+                grouped[movieKey];
 
             if (
                 getSubscriptionScore(current) >
                 getSubscriptionScore(existing)
             ) {
-                grouped[key] =
+                grouped[movieKey] =
                     mergeSubscriptionData(
                         current,
                         existing
                     );
             } else {
-                grouped[key] =
+                grouped[movieKey] =
                     mergeSubscriptionData(
                         existing,
                         current
@@ -436,11 +430,6 @@
         }
 
         saveSubscriptions(result);
-
-        console.log(
-            '[Series Notify] Подписки объединены:',
-            result
-        );
     }
 
     function findSubscription(id) {
@@ -568,7 +557,9 @@
             i < items.length;
             i++
         ) {
-            var item = items[i] || {};
+            var item =
+                items[i] || {};
+
             var key =
                 normalizeFileKey(item);
 
@@ -615,7 +606,7 @@
     }
 
     function getPendingNewFiles(subscription) {
-        var newFiles =
+        var files =
             subscription &&
             Array.isArray(
                 subscription.new_files
@@ -627,15 +618,15 @@
 
         for (
             var i = 0;
-            i < newFiles.length;
+            i < files.length;
             i++
         ) {
             if (
-                !newFiles[i]
+                !files[i]
                     .loaded_in_player
             ) {
                 pending.push(
-                    newFiles[i]
+                    files[i]
                 );
             }
         }
@@ -643,9 +634,7 @@
         return pending;
     }
 
-    function refreshUpdateState(
-        subscription
-    ) {
+    function refreshUpdateState(subscription) {
         if (!subscription) {
             return subscription;
         }
@@ -766,17 +755,22 @@
                     safeClone(
                         torrentObject
                     );
-
-                pendingTorrentMovie =
-                    safeClone(
-                        movie || {}
-                    );
-
-                console.log(
-                    '[Series Notify] Выбрана раздача:',
-                    pendingTorrentObject
-                );
             }
+
+            if (movie) {
+                pendingTorrentMovie =
+                    safeClone(movie);
+            }
+
+            console.log(
+                '[Series Notify] Раздача:',
+                pendingTorrentObject
+            );
+
+            console.log(
+                '[Series Notify] Полный объект сериала:',
+                pendingTorrentMovie
+            );
 
             return originalStart.apply(
                 Lampa.Torrent,
@@ -919,9 +913,7 @@
         });
     }
 
-    function createMovieObject(
-        subscription
-    ) {
+    function createFallbackMovie(subscription) {
         return {
             id:
                 subscription.movie_id,
@@ -949,6 +941,21 @@
             media_type: 'tv',
             source: 'tmdb'
         };
+    }
+
+    function getSavedMovieObject(subscription) {
+        if (
+            subscription &&
+            subscription.movie_object
+        ) {
+            return safeClone(
+                subscription.movie_object
+            );
+        }
+
+        return createFallbackMovie(
+            subscription
+        );
     }
 
     function openSavedTorrent(cardData) {
@@ -986,20 +993,6 @@
             return;
         }
 
-        var torrentLink =
-            getTorrentLink(
-                subscription
-                    .torrent_object
-            );
-
-        if (!torrentLink) {
-            Lampa.Noty.show(
-                'Series Notify: в раздаче нет ссылки'
-            );
-
-            return;
-        }
-
         if (
             !Lampa.Torrent ||
             typeof Lampa.Torrent.start !==
@@ -1012,14 +1005,19 @@
             return;
         }
 
-        var movie =
-            createMovieObject(
+        var movieObject =
+            getSavedMovieObject(
                 subscription
             );
 
         console.log(
-            '[Series Notify] Открываем точную раздачу:',
+            '[Series Notify] Открываем раздачу:',
             subscription.torrent_object
+        );
+
+        console.log(
+            '[Series Notify] Передаём полный сериал:',
+            movieObject
         );
 
         Lampa.Torrent.start(
@@ -1027,7 +1025,7 @@
                 subscription
                     .torrent_object
             ),
-            movie
+            movieObject
         );
     }
 
@@ -1038,17 +1036,17 @@
         var params =
             event.params || {};
 
-        var movie =
-            params.movie ||
-            pendingTorrentMovie ||
-            {};
+        var movieObject =
+            pendingTorrentMovie
+                ? safeClone(
+                    pendingTorrentMovie
+                )
+                : safeClone(
+                    params.movie || {}
+                );
 
-        var currentFiles =
-            normalizeTorrentFiles(
-                event.items ||
-                params.files ||
-                []
-            );
+        var movie =
+            movieObject || {};
 
         var torrentObject =
             pendingTorrentObject
@@ -1057,19 +1055,12 @@
                 )
                 : null;
 
-        var torrentLink =
-            getTorrentLink(
-                torrentObject
+        var currentFiles =
+            normalizeTorrentFiles(
+                event.items ||
+                params.files ||
+                []
             );
-
-        var torrentTitle =
-            getTorrentTitle(
-                torrentObject
-            ) ||
-            file.path ||
-            file.title ||
-            file.name ||
-            '';
 
         var subscription = {
             id: '',
@@ -1099,11 +1090,16 @@
                 movie.backdrop ||
                 '',
 
+            movie_object:
+                movieObject,
+
             torrent_object:
                 torrentObject,
 
             torrent_link:
-                torrentLink,
+                getTorrentLink(
+                    torrentObject
+                ),
 
             torrent_tracker:
                 getTorrentTracker(
@@ -1116,7 +1112,13 @@
                 '',
 
             torrent_title:
-                torrentTitle,
+                getTorrentTitle(
+                    torrentObject
+                ) ||
+                file.path ||
+                file.title ||
+                file.name ||
+                '',
 
             current_files:
                 currentFiles,
@@ -1147,27 +1149,59 @@
                 Date.now()
         };
 
-        var subscriptions =
-            getSubscriptions();
-
-        var bestExisting =
+        var existing =
             findBestSubscriptionByMovie(
                 subscription.movie_id,
                 subscription.title
             );
 
-        if (bestExisting) {
+        if (existing) {
             subscription =
                 mergeSubscriptionData(
                     subscription,
-                    bestExisting
+                    existing
                 );
+        }
+
+        if (
+            !subscription.movie_object &&
+            existing &&
+            existing.movie_object
+        ) {
+            subscription.movie_object =
+                safeClone(
+                    existing.movie_object
+                );
+        }
+
+        if (
+            !subscription.torrent_object &&
+            existing &&
+            existing.torrent_object
+        ) {
+            subscription.torrent_object =
+                safeClone(
+                    existing.torrent_object
+                );
+
+            subscription.torrent_link =
+                existing.torrent_link;
+
+            subscription.torrent_tracker =
+                existing.torrent_tracker;
         }
 
         subscription.id =
             getSubscriptionId(
                 subscription
             );
+
+        refreshUpdateState(
+            subscription
+        );
+
+        var subscriptions =
+            getSubscriptions();
 
         var movieKey =
             getMovieKey(
@@ -1203,23 +1237,23 @@
         migrateAndDeduplicate();
         updateIndicators();
 
-        console.log(
-            '[Series Notify] Точная подписка сохранена:',
-            subscription
-        );
-
         if (
-            subscription.torrent_object &&
-            subscription.torrent_link
+            subscription.movie_object &&
+            subscription.torrent_object
         ) {
             Lampa.Noty.show(
-                'Series Notify: точная раздача сохранена'
+                'Series Notify: раздача и данные серий сохранены'
             );
         } else {
             Lampa.Noty.show(
-                'Series Notify: объект раздачи отсутствует'
+                'Series Notify: данные сериала сохранены не полностью'
             );
         }
+
+        console.log(
+            '[Series Notify] Подписка:',
+            subscription
+        );
     }
 
     function playerMatchesFile(
@@ -1266,9 +1300,7 @@
         );
     }
 
-    function handlePlayerStart(
-        playerData
-    ) {
+    function handlePlayerStart(playerData) {
         if (!playerData) {
             return;
         }
@@ -1785,7 +1817,7 @@
         updateIndicators();
 
         Lampa.Noty.show(
-            'Series Notify 1.0.1 запущен'
+            'Series Notify 1.0.2 запущен'
         );
     }
 
