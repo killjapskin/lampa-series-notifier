@@ -22,7 +22,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.1.5',
+        version: '1.1.6',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях и сезонах',
         component: COMPONENT_NAME
@@ -542,7 +542,8 @@
             ? found[found.length - 1]
             : '';
     }
-        function uploader(item) {
+
+    function uploader(item) {
         item = item || {};
 
         var keys = [
@@ -572,8 +573,7 @@
 
         return '';
     }
-
-    function baseTitle(value) {
+        function baseTitle(value) {
         return text(value)
             .replace(
                 /\bS(?:eason)?\s*\d{1,3}(?:\s*-\s*S?\d{1,3})?\b/ig,
@@ -2310,23 +2310,12 @@
             movie
         );
     }
-        function returnToContent() {
-        try {
-            if (
-                Lampa.Controller &&
-                typeof Lampa.Controller.toggle ===
-                    'function'
-            ) {
-                Lampa.Controller.toggle(
-                    'content'
-                );
-            }
-        } catch (error) {}
-    }
 
-    function openSeasonSearch(
+    function launchManualTorrent(
         item,
-        season
+        torrent,
+        season,
+        range
     ) {
         pendingSeason = {
             movie_key:
@@ -2340,185 +2329,157 @@
                 10 * 60 * 1000
         };
 
-        Lampa.Activity.push({
-            url:
-                '',
+        pendingMovie =
+            savedMovie(item);
 
-            title:
-                'S' +
-                Number(season) +
-                ' — выбор раздачи',
+        pendingTorrent =
+            clone(torrent);
 
-            component:
-                'torrents',
+        pendingPluginLaunch =
+            false;
 
-            search:
-                (
-                    item.title ||
-                    item.original_title ||
-                    ''
-                ) +
-                ' S' +
-                Number(season),
+        if (pendingPluginLaunchTimer) {
+            clearTimeout(
+                pendingPluginLaunchTimer
+            );
 
-            movie:
-                savedMovie(item),
+            pendingPluginLaunchTimer =
+                null;
+        }
 
-            page:
-                1
-        });
+        Lampa.Torrent.start(
+            clone(torrent),
+            savedMovie(item)
+        );
     }
 
-    function showSeasonMenu(item) {
-        ensureSeasonData(item);
-
-        var maximum =
-            maximumKnownSeason(item);
-
-        var options = [];
-
-        for (
-            var season = 1;
-            season <= maximum;
-            season++
-        ) {
-            var entry =
-                bestEntryForSeason(
-                    item,
-                    season
+    function returnToContent() {
+        try {
+            if (
+                Lampa.Controller &&
+                typeof Lampa.Controller.toggle ===
+                    'function'
+            ) {
+                Lampa.Controller.toggle(
+                    'content'
                 );
-
-            if (entry) {
-                options.push({
-                    title:
-                        'S' +
-                        season,
-
-                    value:
-                        'season_' +
-                        season,
-
-                    season:
-                        season,
-
-                    entry:
-                        entry
-                });
-            } else {
-                options.push({
-                    title:
-                        'S' +
-                        season +
-                        ' — подобрать раздачу',
-
-                    value:
-                        'search_' +
-                        season,
-
-                    season:
-                        season,
-
-                    missing:
-                        true
-                });
             }
-        }
-
-        Lampa.Select.show({
-            title:
-                item.title ||
-                'Сезоны',
-
-            items:
-                options,
-
-            onSelect:
-                function (selected) {
-                    returnToContent();
-
-                    if (
-                        selected &&
-                        selected.entry
-                    ) {
-                        launchTorrent(
-                            item,
-                            selected.entry
-                        );
-
-                        return;
-                    }
-
-                    if (
-                        selected &&
-                        selected.season
-                    ) {
-                        openSeasonSearch(
-                            item,
-                            selected.season
-                        );
-                    }
-                },
-
-            onBack:
-                returnToContent
-        });
+        } catch (error) {}
     }
 
-    function openCard(card) {
-        var item =
-            findById(
-                card.series_notify_id
-            ) ||
-            findByMovie(
-                card.id,
-                card.title ||
-                card.name
-            );
+    function torrentSizeText(torrent) {
+        var size =
+            torrent.Size ||
+            torrent.size ||
+            torrent.SizeBytes ||
+            torrent.size_bytes ||
+            '';
 
-        if (!item) {
-            return;
+        if (!size) {
+            return '';
         }
 
-        markItemViewed(item);
-
-        var maximum =
-            maximumKnownSeason(item);
-
-        if (maximum > 1) {
-            showSeasonMenu(item);
-            return;
+        if (
+            typeof size === 'string' &&
+            /[a-zа-я]/i.test(size)
+        ) {
+            return size;
         }
 
-        var entry =
-            bestEntryForSeason(
-                item,
-                maximum || 1
-            );
+        var bytes =
+            Number(size);
 
-        if (entry) {
-            launchTorrent(
-                item,
-                entry
-            );
-
-            return;
+        if (
+            !bytes ||
+            isNaN(bytes)
+        ) {
+            return '';
         }
 
-        if (item.torrent_object) {
-            launchTorrent(
-                item,
-                {
-                    torrent_object:
-                        item.torrent_object,
+        var units = [
+            'Б',
+            'КБ',
+            'МБ',
+            'ГБ',
+            'ТБ'
+        ];
 
-                    is_new:
-                        false
-                }
-            );
+        var index = 0;
+
+        while (
+            bytes >= 1024 &&
+            index <
+                units.length - 1
+        ) {
+            bytes =
+                bytes / 1024;
+
+            index++;
         }
+
+        return (
+            bytes.toFixed(
+                index > 2
+                    ? 1
+                    : 0
+            ) +
+            ' ' +
+            units[index]
+        );
     }
 
-    function parserGet(
+    function torrentSeeders(torrent) {
+        return Number(
+            torrent.Seeders ||
+            torrent.seeders ||
+            torrent.Seeds ||
+            torrent.seeds ||
+            0
+        );
+    }
+
+    function manualResultTitle(
+        torrent
+    ) {
+        var title =
+            torrentTitle(torrent) ||
+            'Раздача без названия';
+
+        var details = [];
+
+        var tracker =
+            torrentTracker(torrent);
+
+        var size =
+            torrentSizeText(torrent);
+
+        var seeders =
+            torrentSeeders(torrent);
+
+        if (tracker) {
+            details.push(tracker);
+        }
+
+        if (size) {
+            details.push(size);
+        }
+
+        if (seeders) {
+            details.push(
+                'Сиды: ' +
+                seeders
+            );
+        }
+
+        if (details.length) {
+            title +=
+                '\n' +
+                details.join(' • ');
+        }
+
+        return title;
+    }
+        function parserGet(
         item,
         query,
         callback
@@ -2727,6 +2688,387 @@
         nextQuery();
     }
 
+    function resultsForSeason(
+        results,
+        season
+    ) {
+        var filtered = [];
+
+        for (
+            var i = 0;
+            i < results.length;
+            i++
+        ) {
+            var torrent =
+                results[i];
+
+            var range =
+                seasonRange(
+                    torrentTitle(
+                        torrent
+                    )
+                );
+
+            if (
+                !range ||
+                range.seasons.indexOf(
+                    Number(season)
+                ) < 0
+            ) {
+                continue;
+            }
+
+            filtered.push({
+                torrent:
+                    torrent,
+
+                range:
+                    range
+            });
+        }
+
+        filtered.sort(
+            function (first, second) {
+                var firstExact =
+                    Number(
+                        first.range.start
+                    ) ===
+                        Number(season) &&
+                    Number(
+                        first.range.end
+                    ) ===
+                        Number(season)
+                        ? 1
+                        : 0;
+
+                var secondExact =
+                    Number(
+                        second.range.start
+                    ) ===
+                        Number(season) &&
+                    Number(
+                        second.range.end
+                    ) ===
+                        Number(season)
+                        ? 1
+                        : 0;
+
+                if (
+                    firstExact !==
+                    secondExact
+                ) {
+                    return (
+                        secondExact -
+                        firstExact
+                    );
+                }
+
+                var firstSpan =
+                    Number(
+                        first.range.end
+                    ) -
+                    Number(
+                        first.range.start
+                    );
+
+                var secondSpan =
+                    Number(
+                        second.range.end
+                    ) -
+                    Number(
+                        second.range.start
+                    );
+
+                if (
+                    firstSpan !==
+                    secondSpan
+                ) {
+                    return (
+                        firstSpan -
+                        secondSpan
+                    );
+                }
+
+                return (
+                    torrentSeeders(
+                        second.torrent
+                    ) -
+                    torrentSeeders(
+                        first.torrent
+                    )
+                );
+            }
+        );
+
+        return filtered;
+    }
+
+    function showManualSeasonResults(
+        item,
+        season,
+        results
+    ) {
+        var filtered =
+            resultsForSeason(
+                results,
+                season
+            );
+
+        if (!filtered.length) {
+            Lampa.Select.show({
+                title:
+                    'S' +
+                    Number(season),
+
+                items: [
+                    {
+                        title:
+                            'Для S' +
+                            Number(season) +
+                            ' подходящих раздач не найдено',
+
+                        value:
+                            'empty'
+                    }
+                ],
+
+                onSelect:
+                    returnToContent,
+
+                onBack:
+                    returnToContent
+            });
+
+            return;
+        }
+
+        var options = [];
+
+        for (
+            var i = 0;
+            i < filtered.length;
+            i++
+        ) {
+            options.push({
+                title:
+                    manualResultTitle(
+                        filtered[i]
+                            .torrent
+                    ),
+
+                value:
+                    'torrent_' +
+                    i,
+
+                torrent:
+                    filtered[i]
+                        .torrent,
+
+                range:
+                    filtered[i]
+                        .range
+            });
+        }
+
+        Lampa.Select.show({
+            title:
+                'S' +
+                Number(season) +
+                ' — выбрать раздачу',
+
+            items:
+                options,
+
+            onSelect:
+                function (selected) {
+                    returnToContent();
+
+                    if (
+                        !selected ||
+                        !selected.torrent
+                    ) {
+                        return;
+                    }
+
+                    launchManualTorrent(
+                        item,
+                        selected.torrent,
+                        season,
+                        selected.range
+                    );
+                },
+
+            onBack:
+                returnToContent
+        });
+    }
+
+    function openSeasonSearch(
+        item,
+        season
+    ) {
+        searchSeason(
+            item,
+            season,
+            function (results) {
+                showManualSeasonResults(
+                    item,
+                    season,
+                    results
+                );
+            }
+        );
+    }
+
+    function showSeasonMenu(item) {
+        ensureSeasonData(item);
+
+        var maximum =
+            maximumKnownSeason(item);
+
+        var options = [];
+
+        for (
+            var season = 1;
+            season <= maximum;
+            season++
+        ) {
+            var entry =
+                bestEntryForSeason(
+                    item,
+                    season
+                );
+
+            if (entry) {
+                options.push({
+                    title:
+                        'S' +
+                        season,
+
+                    value:
+                        'season_' +
+                        season,
+
+                    season:
+                        season,
+
+                    entry:
+                        entry
+                });
+            } else {
+                options.push({
+                    title:
+                        'S' +
+                        season +
+                        ' — подобрать раздачу',
+
+                    value:
+                        'search_' +
+                        season,
+
+                    season:
+                        season,
+
+                    missing:
+                        true
+                });
+            }
+        }
+
+        Lampa.Select.show({
+            title:
+                item.title ||
+                'Сезоны',
+
+            items:
+                options,
+
+            onSelect:
+                function (selected) {
+                    returnToContent();
+
+                    if (
+                        selected &&
+                        selected.entry
+                    ) {
+                        launchTorrent(
+                            item,
+                            selected.entry
+                        );
+
+                        return;
+                    }
+
+                    if (
+                        selected &&
+                        selected.season
+                    ) {
+                        openSeasonSearch(
+                            item,
+                            selected.season
+                        );
+                    }
+                },
+
+            onBack:
+                returnToContent
+        });
+    }
+
+    function openCard(card) {
+        var item =
+            findById(
+                card.series_notify_id
+            ) ||
+            findByMovie(
+                card.id,
+                card.title ||
+                card.name
+            );
+
+        if (!item) {
+            return;
+        }
+
+        markItemViewed(item);
+
+        var maximum =
+            maximumKnownSeason(item);
+
+        if (maximum > 1) {
+            showSeasonMenu(item);
+            return;
+        }
+
+        var entry =
+            bestEntryForSeason(
+                item,
+                maximum || 1
+            );
+
+        if (entry) {
+            launchTorrent(
+                item,
+                entry
+            );
+
+            return;
+        }
+
+        if (item.torrent_object) {
+            launchTorrent(
+                item,
+                {
+                    torrent_object:
+                        item.torrent_object,
+
+                    is_new:
+                        false
+                }
+            );
+        }
+    }
+
     function softProfileScore(
         candidate,
         reference
@@ -2863,12 +3205,8 @@
                 ),
 
             seeds:
-                Number(
-                    torrent.Seeders ||
-                    torrent.seeders ||
-                    torrent.Seeds ||
-                    torrent.seeds ||
-                    0
+                torrentSeeders(
+                    torrent
                 )
         };
     }
@@ -4199,7 +4537,8 @@
 
         ensureHeadButton();
     }
-        function start() {
+
+    function start() {
         if (
             window.seriesNotifyStarted
         ) {
@@ -4291,7 +4630,7 @@
         updateIndicators();
 
         log(
-            'Версия 1.1.5 запущена'
+            'Версия 1.1.6 запущена'
         );
     }
 
