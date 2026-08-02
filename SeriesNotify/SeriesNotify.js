@@ -14,6 +14,7 @@
     var pendingTorrent = null;
     var pendingMovie = null;
     var pendingSeason = null;
+    var pendingPluginLaunch = false;
 
     var checking = false;
     var checkTimer = null;
@@ -22,7 +23,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.1.2',
+        version: '1.1.3',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях и сезонах',
         component: COMPONENT_NAME
@@ -935,6 +936,179 @@
         return item;
     }
 
+    function knownSeasons(item) {
+        ensureSeasonData(item);
+
+        var values = [];
+
+        item.season_torrents.forEach(
+            function (entry) {
+                if (
+                    entry.range &&
+                    Array.isArray(
+                        entry.range.seasons
+                    )
+                ) {
+                    values =
+                        values.concat(
+                            entry.range.seasons
+                        );
+                }
+            }
+        );
+
+        return uniqueNumbers(values);
+    }
+
+    function maximumKnownSeason(item) {
+        var known =
+            knownSeasons(item);
+
+        var maximum =
+            known.length
+                ? known[
+                    known.length - 1
+                ]
+                : 0;
+
+        return Math.max(
+            maximum,
+            Number(
+                item.season_ceiling ||
+                0
+            )
+        );
+    }
+
+    function seasonEntryKey(entry) {
+        return [
+            entry.range
+                ? entry.range.start
+                : 0,
+
+            entry.range
+                ? entry.range.end
+                : 0,
+
+            torrentLink(
+                entry.torrent_object
+            ) ||
+            torrentTitle(
+                entry.torrent_object
+            )
+        ].join('|');
+    }
+
+    function saveSeasonEntry(
+        item,
+        entry
+    ) {
+        ensureSeasonData(item);
+
+        var key =
+            seasonEntryKey(entry);
+
+        var replaced = false;
+
+        for (
+            var i = 0;
+            i < item.season_torrents.length;
+            i++
+        ) {
+            if (
+                seasonEntryKey(
+                    item.season_torrents[i]
+                ) === key
+            ) {
+                entry.added_at =
+                    item.season_torrents[i]
+                        .added_at ||
+                    entry.added_at;
+
+                entry.is_new =
+                    !!entry.is_new ||
+                    !!item.season_torrents[i]
+                        .is_new;
+
+                item.season_torrents[i] =
+                    entry;
+
+                replaced = true;
+                break;
+            }
+        }
+
+        if (!replaced) {
+            item.season_torrents.push(
+                entry
+            );
+        }
+
+        item.season_torrents.sort(
+            function (first, second) {
+                var firstStart =
+                    first.range
+                        ? first.range.start
+                        : 0;
+
+                var secondStart =
+                    second.range
+                        ? second.range.start
+                        : 0;
+
+                if (
+                    firstStart !==
+                    secondStart
+                ) {
+                    return (
+                        firstStart -
+                        secondStart
+                    );
+                }
+
+                var firstSpan =
+                    first.range
+                        ? first.range.end -
+                            first.range.start
+                        : 999;
+
+                var secondSpan =
+                    second.range
+                        ? second.range.end -
+                            second.range.start
+                        : 999;
+
+                return (
+                    firstSpan -
+                    secondSpan
+                );
+            }
+        );
+
+        item.torrent_object =
+            clone(
+                entry.torrent_object
+            );
+
+        item.torrent_title =
+            torrentTitle(
+                entry.torrent_object
+            );
+
+        item.torrent_link =
+            torrentLink(
+                entry.torrent_object
+            );
+
+        item.torrent_tracker =
+            torrentTracker(
+                entry.torrent_object
+            );
+
+        item.updated_at =
+            Date.now();
+    }
+
     function entryContainsSeason(
         entry,
         season
@@ -995,7 +1169,7 @@
     ) {
         ensureSeasonData(item);
 
-        var entries =
+        var candidates =
             item.season_torrents
                 .filter(
                     function (entry) {
@@ -1006,7 +1180,7 @@
                     }
                 );
 
-        entries.sort(
+        candidates.sort(
             function (first, second) {
                 var firstExact =
                     entrySpan(first) === 0
@@ -1036,6 +1210,15 @@
                     return spanDifference;
                 }
 
+                if (
+                    !!first.is_new !==
+                    !!second.is_new
+                ) {
+                    return first.is_new
+                        ? -1
+                        : 1;
+                }
+
                 return (
                     Number(
                         second.added_at ||
@@ -1049,51 +1232,9 @@
             }
         );
 
-        return entries.length
-            ? entries[0]
+        return candidates.length
+            ? candidates[0]
             : null;
-    }
-
-    function knownSeasons(item) {
-        ensureSeasonData(item);
-
-        var seasons = [];
-
-        for (
-            var i = 0;
-            i < item.season_torrents.length;
-            i++
-        ) {
-            var entry =
-                item.season_torrents[i];
-
-            if (
-                entry.range &&
-                Array.isArray(
-                    entry.range.seasons
-                )
-            ) {
-                seasons =
-                    seasons.concat(
-                        entry.range.seasons
-                    );
-            }
-        }
-
-        return uniqueNumbers(seasons);
-    }
-
-    function maximumKnownSeason(item) {
-        var seasons =
-            knownSeasons(item);
-
-        if (!seasons.length) {
-            return 0;
-        }
-
-        return seasons[
-            seasons.length - 1
-        ];
     }
 
     function rebuildMissingSeasons(
@@ -1103,7 +1244,15 @@
         ensureSeasonData(item);
 
         maximum =
-            Number(maximum) || 0;
+            Number(
+                maximum ||
+                maximumKnownSeason(item)
+            );
+
+        if (!maximum) {
+            item.missing_seasons = [];
+            return;
+        }
 
         var missing = [];
 
@@ -1123,109 +1272,138 @@
         }
 
         item.missing_seasons =
-            uniqueNumbers(missing);
+            missing;
     }
 
-    function seasonEntryKey(entry) {
-        return [
-            entry &&
-            entry.range
-                ? entry.range.start
-                : 0,
-
-            entry &&
-            entry.range
-                ? entry.range.end
-                : 0,
-
-            torrentLink(
-                entry &&
-                entry.torrent_object
-            ) ||
-            torrentTitle(
-                entry &&
-                entry.torrent_object
-            )
-        ].join('|');
-    }
-
-    function saveSeasonEntry(
-        item,
-        entry
-    ) {
+    function updateState(item) {
         ensureSeasonData(item);
 
-        if (
-            !entry ||
-            !entry.range ||
-            !entry.torrent_object
-        ) {
-            return;
-        }
+        item.has_update =
+            !!item.unseen_update;
 
-        var key =
-            seasonEntryKey(entry);
+        return item;
+    }
+        function markItemViewed(item) {
+        ensureSeasonData(item);
 
-        var replaced = false;
+        item.unseen_update = false;
+        item.viewed_at = Date.now();
 
         for (
             var i = 0;
             i < item.season_torrents.length;
             i++
         ) {
-            if (
-                seasonEntryKey(
-                    item.season_torrents[i]
-                ) === key
-            ) {
-                entry.added_at =
-                    item.season_torrents[i]
-                        .added_at ||
-                    entry.added_at ||
-                    Date.now();
-
-                if (
-                    item.season_torrents[i]
-                        .is_new &&
-                    typeof entry.is_new ===
-                        'undefined'
-                ) {
-                    entry.is_new = true;
-                }
-
-                item.season_torrents[i] =
-                    entry;
-
-                replaced = true;
-                break;
-            }
+            item.season_torrents[i]
+                .is_new = false;
         }
 
-        if (!replaced) {
-            item.season_torrents.push(
-                entry
+        updateState(item);
+        saveItem(item);
+        updateIndicators();
+    }
+
+    function movieSeasonCount(movie) {
+        movie = movie || {};
+
+        var count =
+            positiveNumber(
+                movie.number_of_seasons
             );
+
+        if (count) {
+            return count;
         }
 
-        item.season_torrents.sort(
-            function (first, second) {
-                var startDifference =
-                    Number(
-                        first.range.start
-                    ) -
-                    Number(
-                        second.range.start
+        if (
+            Array.isArray(
+                movie.seasons
+            )
+        ) {
+            for (
+                var i = 0;
+                i < movie.seasons.length;
+                i++
+            ) {
+                var seasonNumber =
+                    positiveNumber(
+                        movie.seasons[i]
+                            .season_number
                     );
 
-                if (startDifference) {
-                    return startDifference;
+                if (
+                    seasonNumber > count
+                ) {
+                    count =
+                        seasonNumber;
                 }
-
-                return (
-                    entrySpan(first) -
-                    entrySpan(second)
-                );
             }
+        }
+
+        return count;
+    }
+
+    function setManualReference(
+        item,
+        entry
+    ) {
+        ensureSeasonData(item);
+
+        entry.manual = true;
+        entry.is_new = false;
+        entry.added_at =
+            entry.added_at ||
+            Date.now();
+
+        item.season_torrents = [
+            entry
+        ];
+
+        item.reference_torrent =
+            clone(
+                entry.torrent_object
+            );
+
+        item.reference_profile =
+            profile(
+                entry.torrent_object
+            );
+
+        item.reference_range =
+            clone(
+                entry.range
+            );
+
+        item.reference_updated_at =
+            Date.now();
+
+        item.catalog_initialized =
+            false;
+
+        item.unseen_update =
+            false;
+
+        var movieMaximum =
+            movieSeasonCount(
+                item.movie_object
+            );
+
+        item.season_ceiling =
+            Math.max(
+                Number(
+                    item.season_ceiling ||
+                    0
+                ),
+                Number(
+                    entry.range.end ||
+                    0
+                ),
+                movieMaximum
+            );
+
+        rebuildMissingSeasons(
+            item,
+            item.season_ceiling
         );
 
         item.torrent_object =
@@ -1251,59 +1429,58 @@
         item.updated_at =
             Date.now();
 
-        rebuildMissingSeasons(
-            item,
-            maximumKnownSeason(item)
-        );
+        updateState(item);
     }
 
-    function updateState(item) {
+    function getReferenceProfile(item) {
         ensureSeasonData(item);
 
-        var fileUpdate = false;
-
-        for (
-            var i = 0;
-            i < item.new_files.length;
-            i++
+        if (
+            item.reference_profile
         ) {
-            if (
-                !item.new_files[i]
-                    .loaded_in_player
-            ) {
-                fileUpdate = true;
-                break;
-            }
+            return item.reference_profile;
         }
 
-        var seasonUpdate = false;
-
-        for (
-            var j = 0;
-            j < item.season_torrents.length;
-            j++
+        if (
+            item.reference_torrent
         ) {
-            if (
-                item.season_torrents[j]
-                    .is_new
-            ) {
-                seasonUpdate = true;
-                break;
-            }
+            item.reference_profile =
+                profile(
+                    item.reference_torrent
+                );
+
+            return item.reference_profile;
         }
 
-        item.has_update =
-            fileUpdate ||
-            seasonUpdate ||
-            item.missing_seasons.length > 0;
+        if (
+            item.season_torrents.length
+        ) {
+            var latest =
+                item.season_torrents[
+                    item.season_torrents.length -
+                    1
+                ];
 
-        return item;
+            item.reference_torrent =
+                clone(
+                    latest.torrent_object
+                );
+
+            item.reference_profile =
+                latest.profile ||
+                profile(
+                    latest.torrent_object
+                );
+
+            return item.reference_profile;
+        }
+
+        return null;
     }
 
     function migrate() {
         var map = {};
         var order = [];
-
         var list = read();
 
         for (
@@ -1314,7 +1491,69 @@
             var item =
                 list[i];
 
+            if (!item) {
+                continue;
+            }
+
             ensureSeasonData(item);
+
+            if (
+                typeof item.unseen_update !==
+                'boolean'
+            ) {
+                item.unseen_update =
+                    false;
+            }
+
+            if (
+                typeof item.catalog_initialized !==
+                'boolean'
+            ) {
+                item.catalog_initialized =
+                    false;
+            }
+
+            var movieMaximum =
+                movieSeasonCount(
+                    item.movie_object
+                );
+
+            item.season_ceiling =
+                Math.max(
+                    Number(
+                        item.season_ceiling ||
+                        0
+                    ),
+                    maximumKnownSeason(item),
+                    movieMaximum
+                );
+
+            if (
+                !item.reference_torrent &&
+                item.season_torrents.length
+            ) {
+                var lastEntry =
+                    item.season_torrents[
+                        item.season_torrents.length -
+                        1
+                    ];
+
+                item.reference_torrent =
+                    clone(
+                        lastEntry.torrent_object
+                    );
+
+                item.reference_profile =
+                    lastEntry.profile ||
+                    profile(
+                        lastEntry.torrent_object
+                    );
+            }
+
+            rebuildMissingSeasons(
+                item,
+                item.season_ceiling
+            );
 
             var key =
                 movieKey(item);
@@ -1345,20 +1584,59 @@
                 );
             }
 
-            target.missing_seasons =
-                uniqueNumbers(
-                    target.missing_seasons
-                        .concat(
-                            item.missing_seasons
-                        )
+            if (
+                Number(
+                    item.reference_updated_at ||
+                    0
+                ) >
+                Number(
+                    target.reference_updated_at ||
+                    0
+                )
+            ) {
+                target.reference_torrent =
+                    clone(
+                        item.reference_torrent
+                    );
+
+                target.reference_profile =
+                    clone(
+                        item.reference_profile
+                    );
+
+                target.reference_range =
+                    clone(
+                        item.reference_range
+                    );
+
+                target.reference_updated_at =
+                    item.reference_updated_at;
+            }
+
+            target.season_ceiling =
+                Math.max(
+                    Number(
+                        target.season_ceiling ||
+                        0
+                    ),
+                    Number(
+                        item.season_ceiling ||
+                        0
+                    )
                 );
+
+            target.unseen_update =
+                !!target.unseen_update ||
+                !!item.unseen_update;
 
             if (
                 Number(
-                    item.updated_at || 0
+                    item.updated_at ||
+                    0
                 ) >
                 Number(
-                    target.updated_at || 0
+                    target.updated_at ||
+                    0
                 )
             ) {
                 var fields = [
@@ -1377,10 +1655,18 @@
                     k < fields.length;
                     k++
                 ) {
-                    if (item[fields[k]]) {
-                        target[fields[k]] =
+                    if (
+                        item[
+                            fields[k]
+                        ]
+                    ) {
+                        target[
+                            fields[k]
+                        ] =
                             clone(
-                                item[fields[k]]
+                                item[
+                                    fields[k]
+                                ]
                             );
                     }
                 }
@@ -1391,7 +1677,7 @@
 
             rebuildMissingSeasons(
                 target,
-                maximumKnownSeason(target)
+                target.season_ceiling
             );
         }
 
@@ -1403,16 +1689,12 @@
             m++
         ) {
             var current =
-                map[order[m]];
+                map[
+                    order[m]
+                ];
 
-            rebuildMissingSeasons(
-                current,
-                maximumKnownSeason(current)
-            );
-
-            result.push(
-                updateState(current)
-            );
+            updateState(current);
+            result.push(current);
         }
 
         write(result);
@@ -1478,6 +1760,36 @@
         return null;
     }
 
+    function saveItem(item) {
+        var list = read();
+        var key =
+            movieKey(item);
+
+        var saved = false;
+
+        for (
+            var i = 0;
+            i < list.length;
+            i++
+        ) {
+            if (
+                movieKey(
+                    list[i]
+                ) === key
+            ) {
+                list[i] = item;
+                saved = true;
+                break;
+            }
+        }
+
+        if (!saved) {
+            list.push(item);
+        }
+
+        write(list);
+    }
+
     function activeMovie() {
         if (
             !Lampa.Activity ||
@@ -1532,8 +1844,11 @@
             backdrop_path:
                 item.backdrop,
 
-            media_type: 'tv',
-            source: 'tmdb'
+            media_type:
+                'tv',
+
+            source:
+                'tmdb'
         };
     }
 
@@ -1605,13 +1920,17 @@
         var params =
             event.params || {};
 
+        var launchedByPlugin =
+            !!pendingPluginLaunch;
+
         var movie =
             pendingMovie
                 ? clone(
                     pendingMovie
                 )
                 : clone(
-                    params.movie || {}
+                    params.movie ||
+                    {}
                 );
 
         var torrent =
@@ -1630,6 +1949,7 @@
 
         pendingMovie = null;
         pendingTorrent = null;
+        pendingPluginLaunch = false;
 
         if (
             !isSeries(
@@ -1638,14 +1958,6 @@
                 files
             )
         ) {
-            log(
-                'Фильм проигнорирован:',
-                torrentTitle(torrent) ||
-                file.title ||
-                file.name ||
-                'Без названия'
-            );
-
             return;
         }
 
@@ -1705,22 +2017,22 @@
         var existing = null;
 
         if (target) {
-            var existingList =
+            var stored =
                 read();
 
             for (
                 var i = 0;
-                i < existingList.length;
+                i < stored.length;
                 i++
             ) {
                 if (
                     movieKey(
-                        existingList[i]
+                        stored[i]
                     ) ===
                     target.movie_key
                 ) {
                     existing =
-                        existingList[i];
+                        stored[i];
 
                     break;
                 }
@@ -1738,7 +2050,8 @@
 
         var item =
             existing || {
-                id: '',
+                id:
+                    '',
 
                 movie_id:
                     movie.id ||
@@ -1768,17 +2081,32 @@
                 movie_object:
                     movie,
 
-                new_files: [],
-                season_torrents: [],
-                missing_seasons: [],
+                new_files:
+                    [],
+
+                season_torrents:
+                    [],
+
+                missing_seasons:
+                    [],
+
+                unseen_update:
+                    false,
+
+                catalog_initialized:
+                    false,
 
                 created_at:
                     Date.now()
             };
 
-        item.movie_object =
-            movie ||
-            item.movie_object;
+        if (
+            movie &&
+            Object.keys(movie).length
+        ) {
+            item.movie_object =
+                movie;
+        }
 
         item.current_files =
             files;
@@ -1808,99 +2136,77 @@
             range &&
             torrent
         ) {
-            saveSeasonEntry(
-                item,
-                {
-                    range: range,
+            var entry = {
+                range:
+                    range,
 
-                    label:
-                        seasonLabel(range),
+                label:
+                    seasonLabel(range),
 
-                    torrent_object:
-                        clone(torrent),
+                torrent_object:
+                    clone(torrent),
 
-                    profile:
-                        profile(torrent),
+                profile:
+                    profile(torrent),
 
-                    added_at:
-                        Date.now(),
+                added_at:
+                    Date.now(),
 
-                    is_new: false
-                }
-            );
+                manual:
+                    !launchedByPlugin,
+
+                is_new:
+                    false
+            };
+
+            if (!launchedByPlugin) {
+                setManualReference(
+                    item,
+                    entry
+                );
+            } else {
+                saveSeasonEntry(
+                    item,
+                    entry
+                );
+            }
         }
+
+        item.season_ceiling =
+            Math.max(
+                Number(
+                    item.season_ceiling ||
+                    0
+                ),
+                movieSeasonCount(
+                    item.movie_object
+                ),
+                maximumKnownSeason(item)
+            );
 
         item.id =
             subscriptionId(item);
 
         rebuildMissingSeasons(
             item,
-            maximumKnownSeason(item)
+            item.season_ceiling
         );
 
         updateState(item);
-
-        var key =
-            movieKey(item);
-
-        var list =
-            read();
-
-        var cleaned = [];
-
-        for (
-            var j = 0;
-            j < list.length;
-            j++
-        ) {
-            if (
-                movieKey(
-                    list[j]
-                ) !== key
-            ) {
-                cleaned.push(
-                    list[j]
-                );
-            }
-        }
-
-        cleaned.push(item);
-
-        write(cleaned);
+        saveItem(item);
         migrate();
         updateIndicators();
 
         pendingSeason = null;
-    }
 
-    function saveItem(item) {
-        var list = read();
-        var key =
-            movieKey(item);
-
-        var saved = false;
-
-        for (
-            var i = 0;
-            i < list.length;
-            i++
+        if (
+            !launchedByPlugin
         ) {
-            if (
-                movieKey(
-                    list[i]
-                ) === key
-            ) {
-                list[i] = item;
-                saved = true;
-                break;
-            }
+            setTimeout(
+                runCheck,
+                300
+            );
         }
-
-        if (!saved) {
-            list.push(item);
-        }
-
-        write(list);
     }
 
     function launchTorrent(
@@ -1918,7 +2224,9 @@
         }
 
         entry.is_new = false;
-        item.updated_at = Date.now();
+
+        item.updated_at =
+            Date.now();
 
         updateState(item);
         saveItem(item);
@@ -1934,6 +2242,9 @@
             clone(
                 entry.torrent_object
             );
+
+        pendingPluginLaunch =
+            true;
 
         Lampa.Torrent.start(
             clone(
@@ -1974,7 +2285,8 @@
         };
 
         Lampa.Activity.push({
-            url: '',
+            url:
+                '',
 
             title:
                 'S' +
@@ -1996,7 +2308,8 @@
             movie:
                 savedMovie(item),
 
-            page: 1
+            page:
+                1
         });
     }
 
@@ -2023,15 +2336,17 @@
                 options.push({
                     title:
                         'S' +
-                        season +
-                        (
-                            entry.is_new
-                                ? ' — NEW'
-                                : ''
-                        ),
+                        season,
 
-                    season: season,
-                    entry: entry
+                    value:
+                        'season_' +
+                        season,
+
+                    season:
+                        season,
+
+                    entry:
+                        entry
                 });
             } else {
                 options.push({
@@ -2040,8 +2355,15 @@
                         season +
                         ' — подобрать раздачу',
 
-                    season: season,
-                    missing: true
+                    value:
+                        'search_' +
+                        season,
+
+                    season:
+                        season,
+
+                    missing:
+                        true
                 });
             }
         }
@@ -2051,7 +2373,8 @@
                 item.title ||
                 'Сезоны',
 
-            items: options,
+            items:
+                options,
 
             onSelect:
                 function (selected) {
@@ -2100,6 +2423,7 @@
             return;
         }
 
+        markItemViewed(item);
         ensureSeasonData(item);
 
         var maximum =
@@ -2132,12 +2456,14 @@
                     torrent_object:
                         item.torrent_object,
 
-                    is_new: false
+                    is_new:
+                        false
                 }
             );
         }
     }
-        function parserSearch(
+
+    function parserSearch(
         item,
         callback
     ) {
@@ -2160,9 +2486,14 @@
                 movie:
                     savedMovie(item),
 
-                other: true,
-                from_search: true,
-                global: true
+                other:
+                    true,
+
+                from_search:
+                    true,
+
+                global:
+                    true
             },
 
             function (json) {
@@ -2182,36 +2513,6 @@
         );
     }
 
-    function matchingReference(
-        item,
-        candidate
-    ) {
-        for (
-            var i = 0;
-            i < item.season_torrents.length;
-            i++
-        ) {
-            var reference =
-                item.season_torrents[i]
-                    .profile ||
-                profile(
-                    item.season_torrents[i]
-                        .torrent_object
-                );
-
-            if (
-                profileMatches(
-                    candidate,
-                    reference
-                )
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     function candidateRank(
         candidate,
         season
@@ -2221,16 +2522,33 @@
 
         var span =
             range
-                ? Number(range.end) -
-                    Number(range.start)
+                ? Number(
+                    range.end
+                ) -
+                    Number(
+                        range.start
+                    )
                 : 999;
 
         var exactSeason =
             range &&
-            Number(range.start) ===
+            Number(
+                range.start
+            ) ===
                 Number(season) &&
-            Number(range.end) ===
+            Number(
+                range.end
+            ) ===
                 Number(season);
+
+        var seeds =
+            Number(
+                candidate.torrent.Seeders ||
+                candidate.torrent.seeders ||
+                candidate.torrent.Seeds ||
+                candidate.torrent.seeds ||
+                0
+            );
 
         return {
             exact:
@@ -2238,23 +2556,18 @@
                     ? 1
                     : 0,
 
-            span: span,
+            span:
+                span,
 
             seeds:
-                Number(
-                    candidate.torrent.Seeders ||
-                    candidate.torrent.seeders ||
-                    candidate.torrent.Seeds ||
-                    candidate.torrent.seeds ||
-                    0
-                )
+                seeds
         };
     }
 
     function chooseBestCandidate(
-        item,
         candidates,
-        season
+        season,
+        reference
     ) {
         var matching = [];
 
@@ -2264,9 +2577,10 @@
             i++
         ) {
             if (
-                matchingReference(
-                    item,
-                    candidates[i].profile
+                profileMatches(
+                    candidates[i]
+                        .profile,
+                    reference
                 )
             ) {
                 matching.push(
@@ -2321,7 +2635,7 @@
             : null;
     }
 
-    function addCandidateToSeasonMap(
+    function addCandidateToMap(
         map,
         torrent,
         range
@@ -2357,30 +2671,84 @@
         }
     }
 
+    function sameTorrentEntry(
+        entry,
+        candidate
+    ) {
+        if (
+            !entry ||
+            !candidate
+        ) {
+            return false;
+        }
+
+        var firstLink =
+            torrentLink(
+                entry.torrent_object
+            );
+
+        var secondLink =
+            torrentLink(
+                candidate.torrent
+            );
+
+        if (
+            firstLink &&
+            secondLink
+        ) {
+            return (
+                firstLink === secondLink
+            );
+        }
+
+        return (
+            torrentTitle(
+                entry.torrent_object
+            ) ===
+            torrentTitle(
+                candidate.torrent
+            )
+        );
+    }
+
     function checkItem(
         item,
         callback
     ) {
         ensureSeasonData(item);
 
-        var maximumBefore =
-            maximumKnownSeason(item);
+        var reference =
+            getReferenceProfile(item);
 
-        if (!maximumBefore) {
+        if (!reference) {
             callback(false);
             return;
         }
+
+        var previousCeiling =
+            Math.max(
+                Number(
+                    item.season_ceiling ||
+                    0
+                ),
+                maximumKnownSeason(item),
+                movieSeasonCount(
+                    item.movie_object
+                )
+            );
+
+        var initializing =
+            !item.catalog_initialized;
 
         parserSearch(
             item,
             function (results) {
                 var candidates = {};
-                var changed = false;
-
                 var discoveredMaximum =
-                    maximumBefore;
+                    previousCeiling;
 
-                var savedCandidateKeys = {};
+                var changed = false;
+                var newReleaseFound = false;
 
                 for (
                     var i = 0;
@@ -2409,12 +2777,15 @@
                             )
                         );
 
-                    addCandidateToSeasonMap(
+                    addCandidateToMap(
                         candidates,
                         torrent,
                         range
                     );
                 }
+
+                item.season_ceiling =
+                    discoveredMaximum;
 
                 for (
                     var season = 1;
@@ -2422,124 +2793,124 @@
                         discoveredMaximum;
                     season++
                 ) {
-                    var currentEntry =
+                    var options =
+                        candidates[
+                            season
+                        ] ||
+                        [];
+
+                    var selected =
+                        chooseBestCandidate(
+                            options,
+                            season,
+                            reference
+                        );
+
+                    if (!selected) {
+                        continue;
+                    }
+
+                    var current =
                         bestEntryForSeason(
                             item,
                             season
                         );
 
-                    var options =
-                        candidates[season] ||
-                        [];
-
-                    var exact =
-                        chooseBestCandidate(
-                            item,
-                            options,
-                            season
-                        );
-
-                    if (!exact) {
-                        continue;
-                    }
-
-                    var exactSpan =
+                    var selectedSpan =
                         Number(
-                            exact.range.end
+                            selected.range.end
                         ) -
                         Number(
-                            exact.range.start
+                            selected.range.start
                         );
 
-                    if (
-                        currentEntry &&
-                        entrySpan(
-                            currentEntry
-                        ) <= exactSpan
-                    ) {
-                        continue;
-                    }
-
-                    var candidateKey = [
-                        torrentLink(
-                            exact.torrent
+                    var shouldReplace =
+                        !current ||
+                        !profileMatches(
+                            current.profile ||
+                            profile(
+                                current.torrent_object
+                            ),
+                            reference
                         ) ||
-                        torrentTitle(
-                            exact.torrent
-                        ),
-
-                        exact.range.start,
-                        exact.range.end
-                    ].join('|');
+                        entrySpan(current) >
+                            selectedSpan;
 
                     if (
-                        savedCandidateKeys[
-                            candidateKey
-                        ]
+                        current &&
+                        sameTorrentEntry(
+                            current,
+                            selected
+                        )
                     ) {
+                        shouldReplace =
+                            false;
+                    }
+
+                    if (!shouldReplace) {
                         continue;
                     }
+
+                    var isNewRelease =
+                        !initializing &&
+                        season >
+                            previousCeiling;
 
                     saveSeasonEntry(
                         item,
                         {
                             range:
-                                exact.range,
+                                selected.range,
 
                             label:
                                 seasonLabel(
-                                    exact.range
+                                    selected.range
                                 ),
 
                             torrent_object:
                                 clone(
-                                    exact.torrent
+                                    selected.torrent
                                 ),
 
                             profile:
-                                exact.profile,
+                                selected.profile,
 
                             added_at:
                                 Date.now(),
 
+                            manual:
+                                false,
+
                             is_new:
-                                true
+                                isNewRelease
                         }
                     );
 
-                    savedCandidateKeys[
-                        candidateKey
-                    ] = true;
-
                     changed = true;
+
+                    if (isNewRelease) {
+                        newReleaseFound =
+                            true;
+                    }
                 }
-
-                var maximumAfter =
-                    Math.max(
-                        discoveredMaximum,
-                        maximumKnownSeason(
-                            item
-                        )
-                    );
-
-                var previousMissing =
-                    item.missing_seasons
-                        .join(',');
 
                 rebuildMissingSeasons(
                     item,
-                    maximumAfter
+                    discoveredMaximum
                 );
 
-                if (
-                    previousMissing !==
-                    item.missing_seasons
-                        .join(',')
-                ) {
-                    item.updated_at =
-                        Date.now();
+                item.catalog_initialized =
+                    true;
 
-                    changed = true;
+                item.last_checked_at =
+                    Date.now();
+
+                if (newReleaseFound) {
+                    item.unseen_update =
+                        true;
+
+                    item.last_update_at =
+                        Date.now();
                 }
 
                 updateState(item);
@@ -2597,8 +2968,7 @@
 
         next();
     }
-
-    function notificationCount() {
+        function notificationCount() {
         var list = read();
         var count = 0;
 
@@ -2633,28 +3003,43 @@
             ')'
         );
 
-        var button =
-            $('.' + HEAD_CLASS);
+        var buttons = $(
+            '.' +
+            HEAD_CLASS +
+            ', .' +
+            MENU_CLASS
+        );
 
-        button.toggleClass(
+        buttons.toggleClass(
             'series-notify-active',
             count > 0
         );
 
-        button
+        buttons
             .find(
-                '.series-notify-head-counter'
+                '.series-notify-counter'
             )
             .text(
                 count > 99
                     ? '99+'
                     : count
             );
+
+        buttons
+            .find(
+                '.series-notify-counter'
+            )
+            .toggle(
+                count > 0
+            );
     }
 
     function sortItems(list) {
         return list.sort(
-            function (first, second) {
+            function (
+                first,
+                second
+            ) {
                 updateState(first);
                 updateState(second);
 
@@ -2667,27 +3052,38 @@
                         : -1;
                 }
 
-                var timeDifference =
+                var firstTime =
                     Number(
-                        second.updated_at ||
-                        second.created_at ||
-                        0
-                    ) -
-                    Number(
+                        first.last_update_at ||
                         first.updated_at ||
                         first.created_at ||
                         0
                     );
 
-                if (timeDifference) {
-                    return timeDifference;
+                var secondTime =
+                    Number(
+                        second.last_update_at ||
+                        second.updated_at ||
+                        second.created_at ||
+                        0
+                    );
+
+                if (
+                    firstTime !==
+                    secondTime
+                ) {
+                    return (
+                        secondTime -
+                        firstTime
+                    );
                 }
 
                 return String(
                     first.title || ''
                 ).localeCompare(
                     String(
-                        second.title || ''
+                        second.title ||
+                        ''
                     )
                 );
             }
@@ -2766,12 +3162,16 @@
             }
 
             deleting = true;
+
             returnToContent();
 
             setTimeout(
                 function () {
+                    var removed =
+                        removeItem(card);
+
                     if (
-                        removeItem(card) &&
+                        removed &&
                         cardObject &&
                         typeof cardObject.render ===
                             'function'
@@ -2854,7 +3254,9 @@
             i++
         ) {
             var item =
-                list[i];
+                updateState(
+                    list[i]
+                );
 
             cards.push({
                 id:
@@ -2891,8 +3293,7 @@
                     item.id,
 
                 series_notify_has_update:
-                    updateState(item)
-                        .has_update
+                    item.has_update
             });
         }
 
@@ -2964,19 +3365,44 @@
                 if (
                     card &&
                     typeof card.render ===
-                        'function' &&
-                    element
-                        .series_notify_has_update
+                        'function'
                 ) {
-                    card.render()
-                        .addClass(
-                            'series-notify-card-update'
+                    var rendered =
+                        card.render();
+
+                    if (
+                        rendered &&
+                        rendered.length
+                    ) {
+                        rendered.toggleClass(
+                            'series-notify-card-update',
+                            !!element
+                                .series_notify_has_update
                         );
+                    }
                 }
 
                 card.onEnter =
                     function () {
                         openCard(element);
+
+                        if (
+                            card &&
+                            typeof card.render ===
+                                'function'
+                        ) {
+                            var rendered =
+                                card.render();
+
+                            if (
+                                rendered &&
+                                rendered.length
+                            ) {
+                                rendered.removeClass(
+                                    'series-notify-card-update'
+                                );
+                            }
+                        }
                     };
 
                 card.onMenu =
@@ -3009,71 +3435,88 @@
             'position:relative;' +
             'display:flex;' +
             'align-items:center;' +
-            'justify-content:center' +
-            '}' +
-
-            '.' +
-            HEAD_CLASS +
-            ' svg{' +
-            'display:block;' +
-            'width:1.5em;' +
-            'height:1.5em;' +
+            'justify-content:center;' +
             'overflow:visible' +
             '}' +
 
             '.' +
-            HEAD_CLASS +
-            ' .series-notify-active-background{' +
+            MENU_CLASS +
+            ' .menu__ico{' +
+            'position:relative;' +
+            'overflow:visible' +
+            '}' +
+
+            '.series-notify-face{' +
+            'position:relative;' +
+            'display:block;' +
+            'width:1.9em;' +
+            'height:1.9em;' +
+            'overflow:visible' +
+            '}' +
+
+            '.series-notify-face svg{' +
+            'display:block;' +
+            'width:100%;' +
+            'height:100%;' +
+            'overflow:visible' +
+            '}' +
+
+            '.series-notify-rick{' +
             'display:none' +
             '}' +
 
-            '.' +
-            HEAD_CLASS +
-            '.series-notify-active ' +
-            '.series-notify-active-background{' +
+            '.series-notify-morty{' +
             'display:block' +
             '}' +
 
-            '.' +
-            HEAD_CLASS +
             '.series-notify-active ' +
-            '.series-notify-star{' +
-            'fill:#fff;' +
-            'stroke:#fff' +
+            '.series-notify-rick{' +
+            'display:block;' +
+            'filter:' +
+            'drop-shadow(0 0 .18em rgba(111,255,225,.95)) ' +
+            'drop-shadow(0 0 .42em rgba(80,220,255,.85)) ' +
+            'drop-shadow(0 0 .75em rgba(94,255,153,.55))' +
             '}' +
 
-            '.' +
-            HEAD_CLASS +
             '.series-notify-active ' +
-            '.series-notify-plus{' +
-            'stroke:#fff' +
+            '.series-notify-morty{' +
+            'display:none' +
             '}' +
 
-            '.series-notify-head-counter{' +
+            '.series-notify-counter{' +
             'display:none;' +
             'position:absolute;' +
-            'right:-.3em;' +
-            'top:-.35em;' +
-            'min-width:1.4em;' +
-            'height:1.4em;' +
-            'padding:0 .25em;' +
+            'left:calc(100% - .15em);' +
+            'top:calc(100% - .55em);' +
+            'min-width:1.45em;' +
+            'height:1.45em;' +
+            'padding:0 .28em;' +
             'border-radius:1em;' +
             'background:#e53935;' +
             'color:#fff;' +
+            'border:.12em solid rgba(255,255,255,.9);' +
             'font-size:.55em;' +
             'font-weight:700;' +
-            'line-height:1.4em;' +
+            'line-height:1.2em;' +
             'text-align:center;' +
             'box-sizing:border-box;' +
             'pointer-events:none;' +
-            'z-index:10' +
+            'z-index:20;' +
+            'box-shadow:0 0 .4em rgba(0,0,0,.75)' +
             '}' +
 
             '.' +
             HEAD_CLASS +
-            '.series-notify-active ' +
-            '.series-notify-head-counter{' +
-            'display:block' +
+            ' .series-notify-counter{' +
+            'left:calc(100% - .25em);' +
+            'top:calc(100% - .5em)' +
+            '}' +
+
+            '.' +
+            MENU_CLASS +
+            ' .series-notify-counter{' +
+            'left:calc(100% - .2em);' +
+            'top:calc(100% - .55em)' +
             '}' +
 
             '.series-notify-card-update{' +
@@ -3108,6 +3551,184 @@
         );
     }
 
+    function mortySvg() {
+        return (
+            '<svg ' +
+            'class="series-notify-morty" ' +
+            'viewBox="0 0 64 64" ' +
+            'xmlns="http://www.w3.org/2000/svg">' +
+
+            '<circle ' +
+            'cx="32" ' +
+            'cy="33" ' +
+            'r="21" ' +
+            'fill="#f2c29b" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="3"/>' +
+
+            '<path ' +
+            'd="M14 26' +
+            'C16 12 25 7 36 9' +
+            'C46 10 51 17 50 27' +
+            'C44 22 39 20 32 20' +
+            'C25 20 19 22 14 26Z" ' +
+            'fill="#7a4a29" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2.4" ' +
+            'stroke-linejoin="round"/>' +
+
+            '<ellipse ' +
+            'cx="24" ' +
+            'cy="33" ' +
+            'rx="4.3" ' +
+            'ry="5.4" ' +
+            'fill="#fff" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2"/>' +
+
+            '<ellipse ' +
+            'cx="40" ' +
+            'cy="33" ' +
+            'rx="4.3" ' +
+            'ry="5.4" ' +
+            'fill="#fff" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2"/>' +
+
+            '<circle ' +
+            'cx="25" ' +
+            'cy="34" ' +
+            'r="1.5" ' +
+            'fill="currentColor"/>' +
+
+            '<circle ' +
+            'cx="39" ' +
+            'cy="34" ' +
+            'r="1.5" ' +
+            'fill="currentColor"/>' +
+
+            '<path ' +
+            'd="M23 47' +
+            'C27 42 37 42 41 47" ' +
+            'fill="none" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2.7" ' +
+            'stroke-linecap="round"/>' +
+
+            '</svg>'
+        );
+    }
+
+    function rickSvg() {
+        return (
+            '<svg ' +
+            'class="series-notify-rick" ' +
+            'viewBox="0 0 64 64" ' +
+            'xmlns="http://www.w3.org/2000/svg">' +
+
+            '<path ' +
+            'd="M12 23' +
+            'L5 17' +
+            'L15 16' +
+            'L10 6' +
+            'L22 13' +
+            'L24 2' +
+            'L31 12' +
+            'L38 2' +
+            'L40 13' +
+            'L53 6' +
+            'L48 17' +
+            'L59 18' +
+            'L51 24' +
+            'Z" ' +
+            'fill="#a8e6ef" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2.5" ' +
+            'stroke-linejoin="round"/>' +
+
+            '<path ' +
+            'd="M15 25' +
+            'C15 15 23 11 32 11' +
+            'C43 11 50 18 49 31' +
+            'C48 46 42 55 32 56' +
+            'C21 55 15 46 15 31Z" ' +
+            'fill="#d8c29d" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="3"/>' +
+
+            '<ellipse ' +
+            'cx="24" ' +
+            'cy="31" ' +
+            'rx="5" ' +
+            'ry="6" ' +
+            'fill="#fff" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2"/>' +
+
+            '<ellipse ' +
+            'cx="40" ' +
+            'cy="31" ' +
+            'rx="5" ' +
+            'ry="6" ' +
+            'fill="#fff" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2"/>' +
+
+            '<circle ' +
+            'cx="25" ' +
+            'cy="32" ' +
+            'r="1.6" ' +
+            'fill="currentColor"/>' +
+
+            '<circle ' +
+            'cx="39" ' +
+            'cy="32" ' +
+            'r="1.6" ' +
+            'fill="currentColor"/>' +
+
+            '<path ' +
+            'd="M21 42' +
+            'C26 49 38 49 43 41' +
+            'C37 44 27 44 21 42Z" ' +
+            'fill="#fff" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2.3" ' +
+            'stroke-linejoin="round"/>' +
+
+            '<path ' +
+            'd="M17 27' +
+            'L28 24" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2.7" ' +
+            'stroke-linecap="round"/>' +
+
+            '<path ' +
+            'd="M36 24' +
+            'L47 27" ' +
+            'stroke="currentColor" ' +
+            'stroke-width="2.7" ' +
+            'stroke-linecap="round"/>' +
+
+            '</svg>'
+        );
+    }
+
+    function faceIcon() {
+        return (
+            '<div class="series-notify-face">' +
+
+            mortySvg() +
+
+            rickSvg() +
+
+            '<div class="series-notify-counter">' +
+            '0' +
+            '</div>' +
+
+            '</div>'
+        );
+    }
+
     function openUpdates() {
         Lampa.Activity.push({
             url:
@@ -3122,49 +3743,6 @@
             page:
                 1
         });
-    }
-
-    function icon() {
-        return (
-            '<svg viewBox="0 0 24 24" ' +
-            'fill="none" ' +
-            'xmlns="http://www.w3.org/2000/svg">' +
-
-            '<circle ' +
-            'class="series-notify-active-background" ' +
-            'cx="12" ' +
-            'cy="12" ' +
-            'r="10" ' +
-            'fill="currentColor"/>' +
-
-            '<path ' +
-            'class="series-notify-star" ' +
-            'd="M10.2 3.8' +
-            'l1.55 3.14' +
-            '3.47.5' +
-            '-2.51 2.45' +
-            '.59 3.45' +
-            '-3.1-1.63' +
-            '-3.1 1.63' +
-            '.59-3.45' +
-            '-2.51-2.45' +
-            '3.47-.5' +
-            'L10.2 3.8Z" ' +
-            'fill="none" ' +
-            'stroke="currentColor" ' +
-            'stroke-width="1.7" ' +
-            'stroke-linejoin="round"/>' +
-
-            '<path ' +
-            'class="series-notify-plus" ' +
-            'd="M17.5 14.5V20.5' +
-            'M14.5 17.5H20.5" ' +
-            'stroke="currentColor" ' +
-            'stroke-width="2" ' +
-            'stroke-linecap="round"/>' +
-
-            '</svg>'
-        );
     }
 
     function ensureHeadButton() {
@@ -3183,11 +3761,7 @@
                 HEAD_CLASS +
                 '">' +
 
-                icon() +
-
-                '<div class="series-notify-head-counter">' +
-                '0' +
-                '</div>' +
+                faceIcon() +
 
                 '</div>'
             );
@@ -3219,7 +3793,7 @@
             '">' +
 
             '<div class="menu__ico">' +
-            icon() +
+            faceIcon() +
             '</div>' +
 
             '<div class="menu__text">' +
@@ -3464,7 +4038,7 @@
         updateIndicators();
 
         log(
-            'Версия 1.1.2 запущена'
+            'Версия 1.1.3 запущена'
         );
     }
 
