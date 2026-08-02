@@ -22,7 +22,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.1.6',
+        version: '1.1.7',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях и сезонах',
         component: COMPONENT_NAME
@@ -30,27 +30,16 @@
 
     function log() {
         try {
-            var args =
-                Array.prototype.slice.call(
-                    arguments
-                );
+            var args = Array.prototype.slice.call(arguments);
 
-            args.unshift(
-                '[Series Notify]'
-            );
+            args.unshift('[Series Notify]');
 
-            console.log.apply(
-                console,
-                args
-            );
+            console.log.apply(console, args);
         } catch (error) {}
     }
 
     function clone(value, depth) {
-        depth =
-            typeof depth === 'number'
-                ? depth
-                : 0;
+        depth = typeof depth === 'number' ? depth : 0;
 
         if (
             depth > 10 ||
@@ -75,16 +64,13 @@
                 i < value.length;
                 i++
             ) {
-                var copiedItem =
-                    clone(
-                        value[i],
-                        depth + 1
-                    );
+                var copiedItem = clone(
+                    value[i],
+                    depth + 1
+                );
 
                 if (copiedItem !== null) {
-                    arrayResult.push(
-                        copiedItem
-                    );
+                    arrayResult.push(copiedItem);
                 }
             }
 
@@ -103,15 +89,13 @@
             }
 
             try {
-                var copiedValue =
-                    clone(
-                        value[key],
-                        depth + 1
-                    );
+                var copiedValue = clone(
+                    value[key],
+                    depth + 1
+                );
 
                 if (copiedValue !== null) {
-                    objectResult[key] =
-                        copiedValue;
+                    objectResult[key] = copiedValue;
                 }
             } catch (error) {}
         }
@@ -127,11 +111,10 @@
     }
 
     function read() {
-        var list =
-            Lampa.Storage.get(
-                STORAGE_KEY,
-                []
-            );
+        var list = Lampa.Storage.get(
+            STORAGE_KEY,
+            []
+        );
 
         if (typeof list === 'string') {
             try {
@@ -201,19 +184,12 @@
 
         if (
             item.movie_id !== null &&
-            typeof item.movie_id !==
-                'undefined'
+            typeof item.movie_id !== 'undefined'
         ) {
-            return (
-                'id:' +
-                String(item.movie_id)
-            );
+            return 'id:' + String(item.movie_id);
         }
 
-        return (
-            'title:' +
-            text(item.title)
-        );
+        return 'title:' + text(item.title);
     }
 
     function subscriptionId(item) {
@@ -237,10 +213,9 @@
             return 0;
         }
 
-        var string =
-            String(value)
-                .toLowerCase()
-                .trim();
+        var string = String(value)
+            .toLowerCase()
+            .trim();
 
         if (
             !string ||
@@ -253,8 +228,7 @@
             return 0;
         }
 
-        var number =
-            Number(string);
+        var number = Number(string);
 
         if (
             isNaN(number) ||
@@ -270,21 +244,19 @@
         var result = [];
         var used = {};
 
-        values =
-            Array.isArray(values)
-                ? values
-                : [];
+        values = Array.isArray(values)
+            ? values
+            : [];
 
         for (
             var i = 0;
             i < values.length;
             i++
         ) {
-            var number =
-                parseInt(
-                    values[i],
-                    10
-                );
+            var number = parseInt(
+                values[i],
+                10
+            );
 
             if (
                 !number ||
@@ -312,10 +284,9 @@
         file,
         files
     ) {
-        var source =
-            String(value || '')
-                .replace(/[._]+/g, ' ')
-                .replace(/–|—/g, '-');
+        var source = String(value || '')
+            .replace(/[._]+/g, ' ')
+            .replace(/–|—/g, '-');
 
         var seasons = [];
         var match;
@@ -342,17 +313,15 @@
                             .exec(source)
                 )
             ) {
-                var start =
-                    parseInt(
-                        match[1],
-                        10
-                    );
+                var start = parseInt(
+                    match[1],
+                    10
+                );
 
-                var end =
-                    parseInt(
-                        match[2],
-                        10
-                    );
+                var end = parseInt(
+                    match[2],
+                    10
+                );
 
                 if (end < start) {
                     var swap = start;
@@ -407,10 +376,9 @@
             );
         }
 
-        files =
-            Array.isArray(files)
-                ? files
-                : [];
+        files = Array.isArray(files)
+            ? files
+            : [];
 
         for (
             var k = 0;
@@ -430,8 +398,7 @@
             }
         }
 
-        seasons =
-            uniqueNumbers(seasons);
+        seasons = uniqueNumbers(seasons);
 
         if (!seasons.length) {
             return null;
@@ -439,12 +406,10 @@
 
         return {
             start: seasons[0],
-
             end:
                 seasons[
                     seasons.length - 1
                 ],
-
             seasons: seasons
         };
     }
@@ -458,10 +423,7 @@
             Number(range.start) ===
             Number(range.end)
         ) {
-            return (
-                'S' +
-                Number(range.start)
-            );
+            return 'S' + Number(range.start);
         }
 
         return (
@@ -473,11 +435,10 @@
     }
 
     function resolution(value) {
-        var match =
-            String(value || '')
-                .match(
-                    /\b(2160p|1080p|1080i|720p|576p|480p|4k|uhd)\b/i
-                );
+        var match = String(value || '')
+            .match(
+                /\b(2160p|1080p|1080i|720p|576p|480p|4k|uhd)\b/i
+            );
 
         if (!match) {
             return '';
@@ -496,12 +457,10 @@
     }
 
     function releaseGroup(value) {
-        var source =
-            String(value || '');
+        var source = String(value || '');
 
         var found = [];
         var match;
-
         var pattern =
             /[\[(]([^\]\)]+)[\])]/g;
 
@@ -511,8 +470,7 @@
                     pattern.exec(source)
             )
         ) {
-            var part =
-                text(match[1]);
+            var part = text(match[1]);
 
             if (
                 !part ||
@@ -573,7 +531,8 @@
 
         return '';
     }
-        function baseTitle(value) {
+
+    function baseTitle(value) {
         return text(value)
             .replace(
                 /\bS(?:eason)?\s*\d{1,3}(?:\s*-\s*S?\d{1,3})?\b/ig,
@@ -607,8 +566,7 @@
     }
 
     function profile(item) {
-        var title =
-            torrentTitle(item);
+        var title = torrentTitle(item);
 
         return {
             base:
@@ -634,11 +592,8 @@
         candidate,
         reference
     ) {
-        candidate =
-            candidate || {};
-
-        reference =
-            reference || {};
+        candidate = candidate || {};
+        reference = reference || {};
 
         if (
             candidate.resolution &&
@@ -690,12 +645,11 @@
     }
 
     function seriesMarker(value) {
-        var source =
-            String(value || '')
-                .replace(
-                    /[._-]+/g,
-                    ' '
-                );
+        var source = String(value || '')
+            .replace(
+                /[._-]+/g,
+                ' '
+            );
 
         return (
             /\bS\d{1,3}E\d{1,4}\b/i
@@ -736,10 +690,9 @@
             return true;
         }
 
-        files =
-            Array.isArray(files)
-                ? files
-                : [];
+        files = Array.isArray(files)
+            ? files
+            : [];
 
         for (
             var i = 0;
@@ -792,10 +745,9 @@
     }
 
     function normalizeFiles(items) {
-        items =
-            Array.isArray(items)
-                ? items
-                : [];
+        items = Array.isArray(items)
+            ? items
+            : [];
 
         var files = [];
 
@@ -804,8 +756,7 @@
             i < items.length;
             i++
         ) {
-            var item =
-                items[i] || {};
+            var item = items[i] || {};
 
             var key = [
                 String(
@@ -898,18 +849,17 @@
             !item.season_torrents.length &&
             item.torrent_object
         ) {
-            var range =
-                seasonRange(
-                    item.torrent_title ||
-                    torrentTitle(
-                        item.torrent_object
-                    ),
-                    {
-                        season:
-                            item.season
-                    },
-                    item.current_files
-                );
+            var range = seasonRange(
+                item.torrent_title ||
+                torrentTitle(
+                    item.torrent_object
+                ),
+                {
+                    season:
+                        item.season
+                },
+                item.current_files
+            );
 
             if (range) {
                 item.season_torrents.push({
@@ -1188,7 +1138,8 @@
                 )
         );
     }
-        function entrySpan(entry) {
+
+    function entrySpan(entry) {
         if (
             !entry ||
             !entry.range
@@ -1737,7 +1688,8 @@
 
         return result;
     }
-        function findById(id) {
+
+    function findById(id) {
         var list = read();
 
         for (
@@ -2479,7 +2431,8 @@
 
         return title;
     }
-        function parserGet(
+
+    function parserGet(
         item,
         query,
         callback
@@ -2903,21 +2856,146 @@
         });
     }
 
-    function openSeasonSearch(
-        item,
-        season
-    ) {
-        searchSeason(
-            item,
-            season,
-            function (results) {
-                showManualSeasonResults(
-                    item,
-                    season,
-                    results
-                );
+    function openSeasonSearch(item, season) {
+        season = Number(season);
+
+        var movie =
+            savedMovie(item);
+
+        movie.number_of_seasons =
+            Math.max(
+                Number(
+                    movie.number_of_seasons ||
+                    0
+                ),
+
+                maximumKnownSeason(item),
+
+                season
+            );
+
+        pendingSeason = {
+            movie_key:
+                movieKey(item),
+
+            season:
+                season,
+
+            expires_at:
+                Date.now() +
+                10 * 60 * 1000
+        };
+
+        pendingMovie =
+            clone(movie);
+
+        pendingTorrent =
+            null;
+
+        pendingPluginLaunch =
+            false;
+
+        if (pendingPluginLaunchTimer) {
+            clearTimeout(
+                pendingPluginLaunchTimer
+            );
+
+            pendingPluginLaunchTimer =
+                null;
+        }
+
+        try {
+            var allFilters =
+                Lampa.Storage.get(
+                    'torrents_filter_data',
+                    {}
+                ) || {};
+
+            if (
+                typeof allFilters ===
+                'string'
+            ) {
+                try {
+                    allFilters =
+                        JSON.parse(
+                            allFilters
+                        );
+                } catch (error) {
+                    allFilters = {};
+                }
             }
-        );
+
+            var cardId =
+                String(
+                    movie.id ||
+                    item.movie_id ||
+                    item.title ||
+                    ''
+                ) +
+                ':tv';
+
+            var currentFilter =
+                allFilters[cardId] ||
+                {};
+
+            if (
+                typeof currentFilter ===
+                'string'
+            ) {
+                try {
+                    currentFilter =
+                        JSON.parse(
+                            currentFilter
+                        );
+                } catch (error) {
+                    currentFilter = {};
+                }
+            }
+
+            currentFilter =
+                clone(currentFilter) ||
+                {};
+
+            currentFilter.season = [
+                String(season)
+            ];
+
+            allFilters[cardId] =
+                currentFilter;
+
+            Lampa.Storage.set(
+                'torrents_filter_data',
+                allFilters
+            );
+        } catch (error) {
+            log(
+                'Не удалось установить фильтр сезона',
+                error
+            );
+        }
+
+        Lampa.Activity.push({
+            url:
+                '',
+
+            title:
+                item.title ||
+                'Раздачи',
+
+            component:
+                'torrents',
+
+            search:
+                item.original_title ||
+                item.title ||
+                '',
+
+            movie:
+                movie,
+
+            page:
+                1
+        });
     }
 
     function showSeasonMenu(item) {
@@ -3301,7 +3379,8 @@
             ? candidates[0]
             : null;
     }
-        function checkItem(
+
+    function checkItem(
         item,
         callback
     ) {
@@ -3668,7 +3747,8 @@
 
         next();
     }
-        function notificationCount() {
+
+    function notificationCount() {
         var list = read();
         var count = 0;
 
@@ -4300,7 +4380,8 @@
 
         return instance;
     }
-        function styles() {
+
+    function styles() {
         if (
             $('#' + STYLE_ID).length
         ) {
@@ -4630,7 +4711,7 @@
         updateIndicators();
 
         log(
-            'Версия 1.1.6 запущена'
+            'Версия 1.1.7 запущена'
         );
     }
 
