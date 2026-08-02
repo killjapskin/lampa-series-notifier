@@ -13,6 +13,8 @@
     var pendingTorrent = null;
     var pendingMovie = null;
     var pendingSeason = null;
+    var pendingPluginLaunch = false;
+    var pendingPluginLaunchTimer = null;
     var checking = false;
     var checkTimer = null;
     var headTimer = null;
@@ -20,7 +22,7 @@
 
     var manifest = {
         type: 'video',
-        version: '1.1.4',
+        version: '1.1.5',
         name: 'Series Notify',
         description: 'Уведомления о новых сериях и сезонах',
         component: COMPONENT_NAME
@@ -501,7 +503,7 @@
         var match;
 
         var pattern =
-            /[\[(]([^\])]+)[\])]/g;
+            /[\[(]([^\]\)]+)[\])]/g;
 
         while (
             (
@@ -540,8 +542,7 @@
             ? found[found.length - 1]
             : '';
     }
-
-    function uploader(item) {
+        function uploader(item) {
         item = item || {};
 
         var keys = [
@@ -1151,7 +1152,8 @@
         item.updated_at =
             Date.now();
     }
-        function entryContainsSeason(
+
+    function entryContainsSeason(
         entry,
         season
     ) {
@@ -1186,8 +1188,7 @@
                 )
         );
     }
-
-    function entrySpan(entry) {
+        function entrySpan(entry) {
         if (
             !entry ||
             !entry.range
@@ -1398,9 +1399,10 @@
             entry.added_at ||
             Date.now();
 
-        item.season_torrents = [
+        saveSeasonEntry(
+            item,
             entry
-        ];
+        );
 
         item.reference_torrent =
             clone(
@@ -1735,8 +1737,7 @@
 
         return result;
     }
-
-    function findById(id) {
+        function findById(id) {
         var list = read();
 
         for (
@@ -1954,6 +1955,21 @@
         var params =
             event.params || {};
 
+        var launchedByPlugin =
+            !!pendingPluginLaunch;
+
+        pendingPluginLaunch =
+            false;
+
+        if (pendingPluginLaunchTimer) {
+            clearTimeout(
+                pendingPluginLaunchTimer
+            );
+
+            pendingPluginLaunchTimer =
+                null;
+        }
+
         var movie =
             pendingMovie
                 ? clone(
@@ -2164,7 +2180,8 @@
 
         if (
             range &&
-            torrent
+            torrent &&
+            !launchedByPlugin
         ) {
             setManualReference(
                 item,
@@ -2222,10 +2239,12 @@
 
         pendingSeason = null;
 
-        setTimeout(
-            runCheck,
-            300
-        );
+        if (!launchedByPlugin) {
+            setTimeout(
+                runCheck,
+                300
+            );
+        }
     }
 
     function launchTorrent(
@@ -2263,6 +2282,27 @@
                 entry.torrent_object
             );
 
+        pendingPluginLaunch =
+            true;
+
+        if (pendingPluginLaunchTimer) {
+            clearTimeout(
+                pendingPluginLaunchTimer
+            );
+        }
+
+        pendingPluginLaunchTimer =
+            setTimeout(
+                function () {
+                    pendingPluginLaunch =
+                        false;
+
+                    pendingPluginLaunchTimer =
+                        null;
+                },
+                30000
+            );
+
         Lampa.Torrent.start(
             clone(
                 entry.torrent_object
@@ -2270,8 +2310,7 @@
             movie
         );
     }
-
-    function returnToContent() {
+        function returnToContent() {
         try {
             if (
                 Lampa.Controller &&
@@ -3291,8 +3330,7 @@
 
         next();
     }
-
-    function notificationCount() {
+        function notificationCount() {
         var list = read();
         var count = 0;
 
@@ -3477,9 +3515,11 @@
         if (!active) {
             return (
                 '<div class="series-notify-face">' +
+
                 '<div class="series-notify-morty">' +
                 mortySvg() +
                 '</div>' +
+
                 '</div>'
             );
         }
@@ -3922,8 +3962,7 @@
 
         return instance;
     }
-
-    function styles() {
+        function styles() {
         if (
             $('#' + STYLE_ID).length
         ) {
@@ -4160,8 +4199,7 @@
 
         ensureHeadButton();
     }
-
-    function start() {
+        function start() {
         if (
             window.seriesNotifyStarted
         ) {
@@ -4253,7 +4291,7 @@
         updateIndicators();
 
         log(
-            'Версия 1.1.4 запущена'
+            'Версия 1.1.5 запущена'
         );
     }
 
